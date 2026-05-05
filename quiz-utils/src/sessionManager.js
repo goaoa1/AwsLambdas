@@ -48,6 +48,7 @@ export async function updateSession(playerID, updates) {
 
     // 기존 세션(PascalCase)과 새로운 업데이트(PascalCase)를 병합
     const updatedSession = {
+      RetryQuestionIDs: [],
       ...session,
       ...updates,
       UpdatedAt: new Date().toISOString(),

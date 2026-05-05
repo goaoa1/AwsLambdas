@@ -8,7 +8,7 @@ import {
 } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
-import { getShuffledQuestionIDs } from 'quiz-utils/quizManager';
+import { getShuffledQuestionIDs, type ShuffledQuizData } from 'quiz-utils/quizManager';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -41,7 +41,7 @@ const lambdaHandler = async (
   console.log(`[Request] UserId: ${userId}, QuizId: ${quizId}`);
 
   // 3. 퀴즈 데이터 로드 (문제 순서 셔플 포함)
-  let quizData: Awaited<ReturnType<typeof getShuffledQuestionIDs>>;
+  let quizData: ShuffledQuizData;
   try {
     quizData = await getShuffledQuestionIDs(quizId);
   } catch (error) {

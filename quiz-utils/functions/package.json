@@ -4,7 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:zip": "tsc && cd dist/Functions && tar -czf ../../deductStamina.zip deductStamina.js"
+    "build:zip:deductStamina": "tsc && cd dist/Functions && tar -czf ../../deductStamina.zip deductStamina.js",
+    "build:zip:startQuizSession": "tsc && cd dist/Functions && tar -czf ../../startQuizSession.zip startQuizSession.js",
+    "build:zip:recordPlayerInfo": "tsc && cd dist/Functions && tar -czf ../../recordPlayerInfo.zip recordPlayerInfo.js",
+    "build:zip": "tsc && cd dist/Functions && tar -czf ../../deductStamina.zip deductStamina.js && tar -czf ../../startQuizSession.zip startQuizSession.js && tar -czf ../../recordPlayerInfo.zip recordPlayerInfo.js"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
@@ -12,6 +15,7 @@
     "@types/aws-lambda": "^8.10.0",
     "@aws-lambda-powertools/idempotency": "^2.33.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/util-dynamodb": "^3.0.0",
     "@middy/core": "^7.4.0"
   }
