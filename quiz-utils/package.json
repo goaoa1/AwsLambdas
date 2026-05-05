@@ -1,0 +1,19 @@
+{
+  "name": "quiz-utils-build",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "build:layer": "tsc && node scripts/prepareLayer.mjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0",
+    "@types/aws-lambda": "^8.10.0",
+    "@aws-lambda-powertools/idempotency": "^2.33.0",
+    "@aws-sdk/client-dynamodb": "^3.0.0",
+    "@aws-sdk/client-s3": "^3.0.0",
+    "@aws-sdk/util-dynamodb": "^3.0.0",
+    "@middy/core": "^7.4.0"
+  }
+}
