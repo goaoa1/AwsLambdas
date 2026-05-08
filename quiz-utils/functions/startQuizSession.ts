@@ -50,6 +50,7 @@ const lambdaHandler = async (
   }
 
   const now = new Date().toISOString();
+  const nowMs = Date.now();
   const session = {
     PlayerID: userId,
     QuizID: quizId,
@@ -72,9 +73,9 @@ const lambdaHandler = async (
             Update: {
               TableName: PLAYER_TABLE,
               Key: marshall({ PlayerID: userId }),
-              UpdateExpression: 'SET Stamina = Stamina - :cost, UpdatedAt = :now',
+              UpdateExpression: 'SET Stamina = Stamina - :cost, UpdatedAt = :now, LastStaminaUpdateAt = if_not_exists(LastStaminaUpdateAt, :nowMs)',
               ConditionExpression: 'attribute_exists(PlayerID) AND Stamina >= :cost',
-              ExpressionAttributeValues: marshall({ ':cost': STAMINA_COST, ':now': now }),
+              ExpressionAttributeValues: marshall({ ':cost': STAMINA_COST, ':now': now, ':nowMs': nowMs }),
             },
           },
           {
