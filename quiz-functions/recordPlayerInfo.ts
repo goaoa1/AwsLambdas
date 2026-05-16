@@ -9,6 +9,18 @@ const INITIAL_STAMINA = 10;
 const MAX_STAMINA = 10;
 const REGEN_INTERVAL_MS = 10 * 60 * 1000; // 10분마다 1씩 회복
 
+function getKSTDateString(offsetDays = 0): string {
+  const kstOffsetMs = 9 * 60 * 60 * 1000;
+  const dayOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
+  return new Date(Date.now() + kstOffsetMs + dayOffsetMs).toISOString().slice(0, 10);
+}
+
+function calcAttendanceReward(streak: number): number {
+  if (streak % 7 === 0) return 5;
+  if (streak % 3 === 0) return 2;
+  return 1;
+}
+
 export const handler = async (
   event: APIGatewayProxyEvent,
   _context: Context
@@ -87,19 +99,48 @@ export const handler = async (
     }
   }
 
+  // 2b. 재생 클락이 없는데 스테미나가 부족한 경우: 지금 시각으로 클락 초기화
+  //     (클락이 없으면 nextRegenAt을 계산할 수 없어 클라이언트 타이머가 작동 안 함)
+  if (stamina < MAX_STAMINA && lastStaminaUpdateAt == null) {
+    await dynamoDBClient.send(
+      new UpdateItemCommand({
+        TableName: PLAYER_TABLE,
+        Key: marshall({ PlayerID: userId }),
+        UpdateExpression: 'SET LastStaminaUpdateAt = :nowMs, UpdatedAt = :now',
+        ExpressionAttributeValues: marshall({ ':nowMs': nowMs, ':now': now }),
+      })
+    );
+    lastStaminaUpdateAt = nowMs;
+    console.log(`[RecordPlayerInfo] Regen clock was missing — initialized to now`);
+  }
+
   // 3. NextRegenAt 계산 (스테미나가 부족할 때만 의미 있음)
   const nextRegenAt =
     stamina < MAX_STAMINA && lastStaminaUpdateAt != null
       ? new Date(lastStaminaUpdateAt + REGEN_INTERVAL_MS).toISOString()
       : '';
 
-  console.log(`[RecordPlayerInfo] Player ${userId} Stamina: ${stamina}/${MAX_STAMINA}, NextRegenAt: ${nextRegenAt}`);
+  // 4. 출석 상태 계산
+  const todayKST = getKSTDateString(0);
+  const yesterdayKST = getKSTDateString(-1);
+  const lastAttendanceDate: string | undefined = playerData.LastAttendanceDate;
+  const attendanceStreak: number = playerData.AttendanceStreak ?? 0;
+  const attendanceTotalDays: number = playerData.TotalAttendanceDays ?? 0;
+  const claimedToday = lastAttendanceDate === todayKST;
+  const potentialStreak = lastAttendanceDate === yesterdayKST ? attendanceStreak + 1 : 1;
+  const nextReward = claimedToday ? 0 : calcAttendanceReward(potentialStreak);
+
+  console.log(`[RecordPlayerInfo] Player ${userId} Stamina: ${stamina}/${MAX_STAMINA}, NextRegenAt: ${nextRegenAt}, Attendance: claimed=${claimedToday}, streak=${attendanceStreak}`);
 
   return createSuccessResponse({
-    PlayerID:    playerData.PlayerID,
-    Stamina:     stamina,
-    MaxStamina:  MAX_STAMINA,
-    NextRegenAt: nextRegenAt,
-    CreatedAt:   playerData.CreatedAt,
+    PlayerID:                  playerData.PlayerID,
+    Stamina:                   stamina,
+    MaxStamina:                MAX_STAMINA,
+    NextRegenAt:               nextRegenAt,
+    CreatedAt:                 playerData.CreatedAt,
+    AttendanceClaimedToday:    claimedToday,
+    AttendanceStreak:          attendanceStreak,
+    AttendanceTotalDays:       attendanceTotalDays,
+    AttendanceNextReward:      nextReward,
   });
 };

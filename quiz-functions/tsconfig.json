@@ -9,7 +9,7 @@
     "skipLibCheck": true,
     "types": ["node"],
     "paths": {
-      "quiz-utils/*": ["../src/*"]
+      "quiz-utils/*": ["../quiz-utils/src/*"]
     }
   },
   "include": ["./**/*.ts"],
