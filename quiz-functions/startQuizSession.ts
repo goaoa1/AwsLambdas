@@ -58,7 +58,10 @@ const lambdaHandler = async (
     QuestionCount: quizData.QuestionIDs.length,
     CurrentQuestionIndex: 0,
     Score: 0,
-    StartTime: Date.now(),
+    StartTime: nowMs,
+    AccumulatedPlayTime: 0,
+    LastResumeTime: nowMs,
+    IsPaused: false,
     CreatedAt: now,
     UpdatedAt: now,
   };

@@ -90,13 +90,55 @@ export async function deleteSession(playerID) {
 }
 
 /**
+ * 세션 일시정지 — AccumulatedPlayTime 에 경과분을 누적하고 IsPaused = true 로 전환
+ */
+export async function pauseSession(playerID) {
+  const session = await getActiveSession(playerID);
+  if (!session) {
+    throw new Error(`No active session for player ${playerID}`);
+  }
+  if (session.IsPaused) {
+    return session; // 이미 일시정지 상태면 멱등 처리
+  }
+
+  const now = Date.now();
+  const additionalTime = (now - session.LastResumeTime) / 1000;
+  return updateSession(playerID, {
+    AccumulatedPlayTime: (session.AccumulatedPlayTime ?? 0) + additionalTime,
+    IsPaused: true,
+  });
+}
+
+/**
+ * 세션 재개 — LastResumeTime 을 현재 시각으로 갱신하고 IsPaused = false 로 전환
+ */
+export async function resumeSession(playerID) {
+  const session = await getActiveSession(playerID);
+  if (!session) {
+    throw new Error(`No active session for player ${playerID}`);
+  }
+  if (!session.IsPaused) {
+    return session; // 이미 진행 중이면 멱등 처리
+  }
+
+  return updateSession(playerID, {
+    LastResumeTime: Date.now(),
+    IsPaused: false,
+  });
+}
+
+/**
  * 퀴즈 완료 처리 (Results 저장 및 세션 삭제)
  */
 export async function finalizeQuizResult(sessionData) {
   try {
     console.log("[finalizeQuizResult] Finalizing quiz...");
 
-    const elapsedTime = (Date.now() - sessionData.StartTime) / 1000;
+    // 일시정지 중이 아니라면 LastResumeTime 이후 경과분을 마지막으로 누적
+    const pendingTime = sessionData.IsPaused
+      ? 0
+      : (Date.now() - sessionData.LastResumeTime) / 1000;
+    const elapsedTime = (sessionData.AccumulatedPlayTime ?? 0) + pendingTime;
 
     // Unreal 구조체 매핑을 위해 PascalCase로 구성
     const quizResult = {

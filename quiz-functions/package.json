@@ -4,11 +4,13 @@
   "type": "module",
   "scripts": {
     "build": "tsc",
-    "build:zip:deductStamina": "tsc && cd dist/Functions && tar -czf ../../deductStamina.zip deductStamina.js",
-    "build:zip:startQuizSession": "tsc && cd dist/Functions && tar -czf ../../startQuizSession.zip startQuizSession.js",
-    "build:zip:recordPlayerInfo": "tsc && cd dist/Functions && tar -czf ../../recordPlayerInfo.zip recordPlayerInfo.js",
-    "build:zip:abandonQuizSession": "tsc && cd dist/Functions && tar -czf ../../abandonQuizSession.zip abandonQuizSession.js",
-    "build:zip": "tsc && cd dist/Functions && tar -czf ../../deductStamina.zip deductStamina.js && tar -czf ../../startQuizSession.zip startQuizSession.js && tar -czf ../../recordPlayerInfo.zip recordPlayerInfo.js && tar -czf ../../abandonQuizSession.zip abandonQuizSession.js"
+    "build:zip:deductStamina": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/deductStamina.js -DestinationPath deductStamina.zip -Force\"",
+    "build:zip:startQuizSession": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/startQuizSession.js -DestinationPath startQuizSession.zip -Force\"",
+    "build:zip:recordPlayerInfo": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/recordPlayerInfo.js -DestinationPath recordPlayerInfo.zip -Force\"",
+    "build:zip:abandonQuizSession": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/abandonQuizSession.js -DestinationPath abandonQuizSession.zip -Force\"",
+    "build:zip:pauseSession": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/pauseSession.js -DestinationPath pauseSession.zip -Force\"",
+    "build:zip:resumeSession": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/resumeSession.js -DestinationPath resumeSession.zip -Force\"",
+    "build:zip": "tsc && powershell -Command \"Compress-Archive -Path dist/quiz-functions/deductStamina.js -DestinationPath deductStamina.zip -Force; Compress-Archive -Path dist/quiz-functions/startQuizSession.js -DestinationPath startQuizSession.zip -Force; Compress-Archive -Path dist/quiz-functions/recordPlayerInfo.js -DestinationPath recordPlayerInfo.zip -Force; Compress-Archive -Path dist/quiz-functions/abandonQuizSession.js -DestinationPath abandonQuizSession.zip -Force; Compress-Archive -Path dist/quiz-functions/pauseSession.js -DestinationPath pauseSession.zip -Force; Compress-Archive -Path dist/quiz-functions/resumeSession.js -DestinationPath resumeSession.zip -Force\""
   },
   "devDependencies": {
     "typescript": "^5.0.0",
