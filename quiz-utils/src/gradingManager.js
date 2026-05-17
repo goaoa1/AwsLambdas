@@ -80,10 +80,19 @@ export async function processQuizStep(gradingResult, playerID) {
     // 종료 시: DB 정리 및 결과 객체 생성 (이미 { Status, Session } 구조임)
     result = await finalizeQuizResult(updatedSession);
   } else {
-    // 진행 중 시: 표준 응답 구조 생성
+    // 진행 중 시: AccumulatedPlayTime 은 pauseSession 호출 시에만 DB에 누적되므로
+    // 일시정지 없이 풀고 있는 동안에는 DB 값이 0(또는 마지막 누적값)에 머문다.
+    // getQuizSession.ts / finalizeQuizResult 와 동일하게 응답 시점에 라이브 값으로 보정.
+    const accumulated = updatedSession.AccumulatedPlayTime ?? 0;
+    const liveAccumulatedPlayTime = updatedSession.IsPaused
+      ? accumulated
+      : accumulated + (Date.now() - updatedSession.LastResumeTime) / 1000;
     result = {
       Status: "CONTINUE",
-      Session: updatedSession,
+      Session: {
+        ...updatedSession,
+        AccumulatedPlayTime: liveAccumulatedPlayTime,
+      },
     };
   }
 

@@ -77,23 +77,20 @@ export async function getQuizData(quizID, bUseCache = true) {
  */
 export async function getShuffledQuestionIDs(quizID) {
   const quizData = await getQuizData(quizID);
-
-  // S3 필드명은 PascalCase (QuestionIDs)
   const originalIDs = quizData.QuestionIDs;
 
   if (!originalIDs || !Array.isArray(originalIDs)) {
     throw new Error(`Invalid QuestionIDs format for quiz ${quizID}`);
   }
 
-  const shuffledIDs = shuffleArray(originalIDs);
+  const size = quizData.QuizSize ?? originalIDs.length; // 없으면 전체 (하위호환)
+  const shuffledIDs = shuffleArray(originalIDs).slice(0, size);
 
-  console.log(`[Quiz ${quizID}] Shuffled ${shuffledIDs.length} questions`);
+  console.log(`[Quiz ${quizID}] Picked ${shuffledIDs.length}/${originalIDs.length} questions`);
 
-  // 반환 시 스프레드 연산자를 사용하여 기존 PascalCase 필드들을 유지하고
-  // 셔플된 리스트로 덮어씀
   return {
     ...quizData,
     QuestionIDs: shuffledIDs,
-    OriginalOrder: originalIDs, // Unreal/DB 기록용 PascalCase
+    OriginalOrder: originalIDs,
   };
 }
