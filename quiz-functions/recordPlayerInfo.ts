@@ -142,5 +142,7 @@ export const handler = async (
     AttendanceStreak:          attendanceStreak,
     AttendanceTotalDays:       attendanceTotalDays,
     AttendanceNextReward:      nextReward,
+    UnlockedCharacters:        playerData.UnlockedCharacters ?? [],
+    SelectedCharacterId:       playerData.SelectedCharacterId ?? '',
   });
 };
