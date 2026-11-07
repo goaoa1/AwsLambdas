@@ -12,16 +12,20 @@
     "build:zip:resumeSession": "tsc && powershell -Command \"Copy-Item dist/quiz-functions/resumeSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath resumeSession.zip -Force; Remove-Item index.mjs\"",
     "build:zip:getQuizSession": "tsc && powershell -Command \"Copy-Item dist/quiz-functions/getQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath getQuizSession.zip -Force; Remove-Item index.mjs\"",
     "build:zip:selectCharacter": "tsc && powershell -Command \"Copy-Item dist/quiz-functions/selectCharacter.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath selectCharacter.zip -Force; Remove-Item index.mjs\"",
-    "build:zip": "tsc && powershell -Command \"Copy-Item dist/quiz-functions/deductStamina.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath deductStamina.zip -Force; Copy-Item dist/quiz-functions/startQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath startQuizSession.zip -Force; Copy-Item dist/quiz-functions/recordPlayerInfo.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath recordPlayerInfo.zip -Force; Copy-Item dist/quiz-functions/abandonQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath abandonQuizSession.zip -Force; Copy-Item dist/quiz-functions/pauseSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath pauseSession.zip -Force; Copy-Item dist/quiz-functions/resumeSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath resumeSession.zip -Force; Copy-Item dist/quiz-functions/getQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath getQuizSession.zip -Force; Copy-Item dist/quiz-functions/selectCharacter.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath selectCharacter.zip -Force; Remove-Item index.mjs\""
+    "build:zip": "tsc && powershell -Command \"Copy-Item dist/quiz-functions/deductStamina.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath deductStamina.zip -Force; Copy-Item dist/quiz-functions/startQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath startQuizSession.zip -Force; Copy-Item dist/quiz-functions/recordPlayerInfo.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath recordPlayerInfo.zip -Force; Copy-Item dist/quiz-functions/abandonQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath abandonQuizSession.zip -Force; Copy-Item dist/quiz-functions/pauseSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath pauseSession.zip -Force; Copy-Item dist/quiz-functions/resumeSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath resumeSession.zip -Force; Copy-Item dist/quiz-functions/getQuizSession.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath getQuizSession.zip -Force; Copy-Item dist/quiz-functions/selectCharacter.js index.mjs -Force; Compress-Archive -Path index.mjs -DestinationPath selectCharacter.zip -Force; Remove-Item index.mjs\"",
+    "build:shop": "node build-shop.mjs",
+    "deploy:shop": "node deploy-shop.mjs",
+    "deploy:shop:dry": "node deploy-shop.mjs --dry"
   },
   "devDependencies": {
-    "typescript": "^5.0.0",
-    "@types/node": "^20.0.0",
-    "@types/aws-lambda": "^8.10.0",
     "@aws-lambda-powertools/idempotency": "^2.33.0",
     "@aws-sdk/client-dynamodb": "^3.0.0",
     "@aws-sdk/client-s3": "^3.0.0",
     "@aws-sdk/util-dynamodb": "^3.0.0",
-    "@middy/core": "^7.4.0"
+    "@middy/core": "^7.4.0",
+    "@types/aws-lambda": "^8.10.0",
+    "@types/node": "^20.0.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5.0.0"
   }
 }

@@ -144,5 +144,10 @@ export const handler = async (
     AttendanceNextReward:      nextReward,
     UnlockedCharacters:        playerData.UnlockedCharacters ?? [],
     SelectedCharacterId:       playerData.SelectedCharacterId ?? '',
+    // 상점: 로그인 직후 메뉴 상단에 크레딧을 보여 주고, 부스가 입힌 의상을 바로 알 수 있게 함께 내려준다
+    Credits:                   typeof playerData.Credits === 'number' ? playerData.Credits : 0,
+    OwnedOutfits:              Array.isArray(playerData.OwnedOutfits) ? playerData.OwnedOutfits : [],
+    EquippedOutfits:           playerData.EquippedOutfits && typeof playerData.EquippedOutfits === 'object'
+                                 ? playerData.EquippedOutfits : {},
   });
 };
