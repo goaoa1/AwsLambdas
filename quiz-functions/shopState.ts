@@ -2,7 +2,7 @@
 // shopState.ts - PlayerResources 의 상점 관련 속성 읽기
 //   Credits          N   보유 크레딧
 //   OwnedOutfits     L<S> 보유 의상 ID
-//   EquippedOutfits  M<S,S> 캐릭터 ID -> 의상 ID
+//   EquippedOutfits  M<S,S> "캐릭터ID#부위" -> 의상 ID (부위: Top / Bottom / Set, 옛 키는 "캐릭터ID")
 // ========================================
 
 export interface ShopPlayerState {

@@ -6,11 +6,11 @@
 |---|---|---|
 | `GetShop` (`getShop.ts`) | `GET /get-shop` | 카탈로그(`shopCatalog.ts`) + 플레이어 크레딧·보유·착용 |
 | `PurchaseOutfit` (`purchaseOutfit.ts`) | `POST /purchase-outfit` `{OutfitId}` | 멱등(ITEM_PURCHASE). 크레딧 조건부 차감 + `OwnedOutfits` 추가. 409 `InsufficientCredits` / `AlreadyOwned` |
-| `EquipOutfit` (`equipOutfit.ts`) | `POST /equip-outfit` `{CharacterId, OutfitId}` | 보유·호환 확인 뒤 `EquippedOutfits[CharacterId]` 설정. `OutfitId` 가 빈 문자열이면 벗기기 |
+| `EquipOutfit` (`equipOutfit.ts`) | `POST /equip-outfit` `{CharacterId, OutfitId, Unequip?}` | 부위별 착용. 보유·호환 확인 뒤 `EquippedOutfits["Char#Top"/"Char#Bottom"/"Char#Set"]` 설정, 겹치는 부위(세트는 상·하의 모두)는 빠짐. `Unequip: true` 면 그 의상만 벗기기, `OutfitId` 가 빈 문자열이면 그 캐릭터 전부 벗기기. 옛 키 `"Char"` 는 다음 변경 때 부위 키로 옮김 |
 | `PurchaseCredits` (`purchaseCredits.ts`) | `POST /purchase-credits` `{ProductId, PurchaseToken, Platform}` | 멱등(PAYMENT_VERIFY). `google` 은 Play Developer API 로 검증, `sandbox` 는 `ALLOW_SANDBOX_PURCHASE=true` 일 때만. `PurchaseReceipts` 테이블로 토큰 재사용 차단 |
 | `RecordPlayerInfo` (`recordPlayerInfo.ts`) | (기존) | 응답에 `Credits`, `OwnedOutfits`, `EquippedOutfits` 추가 |
 
-PlayerResources 에 새로 쓰는 속성: `Credits`(N), `OwnedOutfits`(L of S), `EquippedOutfits`(M: 캐릭터ID → 의상ID).
+PlayerResources 에 새로 쓰는 속성: `Credits`(N), `OwnedOutfits`(L of S), `EquippedOutfits`(M: `캐릭터ID#부위` → 의상ID, 부위는 `shopCatalog.ts` 의 `Slot`).
 
 ## 묶기와 배포
 
