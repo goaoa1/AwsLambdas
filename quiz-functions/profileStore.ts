@@ -22,6 +22,7 @@ import {
   handleForCode,
   randomFriendCode,
 } from './profileCatalog';
+import { TITLES } from './achievementCatalog';
 
 export const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 
@@ -33,6 +34,12 @@ export interface PlayerProfile {
   CreatedAt?: string;
   UpdatedAt?: string;
   BestRecords?: Record<string, { Score: number; Time: number; Plays: number; At: string }>;
+  EquippedTitle?: string; // 도전과제 3단계: 고른 칭호 ID (Title_…). 없으면 칭호 없음
+}
+
+// 칭호 ID → 보여 줄 이름 (없는 ID 면 빈 값)
+export function titleNameOf(id?: string): string {
+  return id ? TITLES[id] ?? '' : '';
 }
 
 export async function readProfile(playerId: string): Promise<PlayerProfile | undefined> {
@@ -98,6 +105,8 @@ export function toClientProfile(p: PlayerProfile) {
     Nickname: p.Nickname ?? '',
     NicknameTag: p.NicknameTag ?? 0,
     FriendCode: p.FriendCode ? formatFriendCode(p.FriendCode) : '',
+    TitleId: p.EquippedTitle ?? '',
+    Title: titleNameOf(p.EquippedTitle),
   };
 }
 

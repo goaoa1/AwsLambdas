@@ -10,7 +10,7 @@ import type { APIGatewayProxyEvent } from 'aws-lambda';
 import { BatchGetItemCommand, GetItemCommand, QueryCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { HANDLE_TABLE, PROFILE_TABLE, formatFriendCode, handleForCode, normalizeFriendCode } from './profileCatalog';
-import { PlayerProfile, dynamoDBClient } from './profileStore';
+import { PlayerProfile, dynamoDBClient, titleNameOf } from './profileStore';
 
 export const FRIEND_TABLE = 'Friends';
 export const MAX_FRIENDS = 50;
@@ -84,7 +84,7 @@ export async function getProfiles(ids: string[]): Promise<Map<string, PlayerProf
     let keys: Record<string, any>[] = unique.slice(i, i + 100).map((id) => marshall({ PlayerID: id }));
     for (let attempt = 0; attempt < 5 && keys.length; attempt++) {
       const r = await dynamoDBClient.send(
-        new BatchGetItemCommand({ RequestItems: { [PROFILE_TABLE]: { Keys: keys, ProjectionExpression: 'PlayerID, Nickname, NicknameTag, FriendCode, BestRecords' } } })
+        new BatchGetItemCommand({ RequestItems: { [PROFILE_TABLE]: { Keys: keys, ProjectionExpression: 'PlayerID, Nickname, NicknameTag, FriendCode, BestRecords, EquippedTitle' } } })
       );
       for (const it of r.Responses?.[PROFILE_TABLE] ?? []) {
         const p = unmarshall(it) as PlayerProfile;
@@ -102,6 +102,7 @@ export function toEntry(p: PlayerProfile | undefined, status: FriendStatus | 'No
     FriendCode: p?.FriendCode ? formatFriendCode(p.FriendCode) : '',
     Nickname: p?.Nickname ?? '',
     NicknameTag: p?.NicknameTag ?? 0,
+    Title: titleNameOf(p?.EquippedTitle),
     Status: status,
   };
 }

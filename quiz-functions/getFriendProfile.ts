@@ -10,7 +10,7 @@ import { createErrorResponse, createSuccessResponse } from 'quiz-utils/idempoten
 import { GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { PROFILE_TABLE, formatFriendCode } from './profileCatalog';
-import { dynamoDBClient } from './profileStore';
+import { dynamoDBClient, titleNameOf } from './profileStore';
 import { Reason, getRow, getUserId, parseBody, resolveFriendCode } from './friendStore';
 
 const PLAYER_TABLE = 'PlayerResources';
@@ -47,6 +47,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         FriendCode: p.FriendCode ? formatFriendCode(p.FriendCode) : '',
         Nickname: p.Nickname ?? '',
         NicknameTag: p.NicknameTag ?? 0,
+        Title: titleNameOf(p.EquippedTitle),
         IsMe: other === me,
         FriendsSince: since ?? '',
         SelectedCharacterId: r.SelectedCharacterId ?? '',
