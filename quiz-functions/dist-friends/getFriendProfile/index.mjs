@@ -1,0 +1,127 @@
+// getFriendProfile.ts
+import { createErrorResponse, createSuccessResponse } from "quiz-utils/idempotencyUtils";
+import { GetItemCommand as GetItemCommand3 } from "@aws-sdk/client-dynamodb";
+import { marshall as marshall3, unmarshall as unmarshall3 } from "@aws-sdk/util-dynamodb";
+
+// profileCatalog.ts
+var CODE_ALPHABET = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+var FRIEND_CODE_LENGTH = 6;
+function formatFriendCode(code) {
+  return code.length === FRIEND_CODE_LENGTH ? `${code.slice(0, 3)}-${code.slice(3)}` : code;
+}
+function normalizeFriendCode(input) {
+  const s = (input || "").toUpperCase().replace(/[\s-]/g, "");
+  if (s.length !== FRIEND_CODE_LENGTH) return "";
+  for (const ch of s) if (!CODE_ALPHABET.includes(ch)) return "";
+  return s;
+}
+var handleForCode = (code) => `CODE#${code}`;
+var PROFILE_TABLE = "PlayerProfiles";
+var HANDLE_TABLE = "PlayerHandles";
+
+// profileStore.ts
+import {
+  DynamoDBClient,
+  GetItemCommand,
+  TransactWriteItemsCommand,
+  TransactionCanceledException
+} from "@aws-sdk/client-dynamodb";
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
+
+// friendStore.ts
+import { BatchGetItemCommand, GetItemCommand as GetItemCommand2, QueryCommand } from "@aws-sdk/client-dynamodb";
+import { marshall as marshall2, unmarshall as unmarshall2 } from "@aws-sdk/util-dynamodb";
+var FRIEND_TABLE = "Friends";
+function getUserId(event) {
+  return event.requestContext?.authorizer?.claims?.sub;
+}
+function parseBody(body) {
+  try {
+    return JSON.parse(body || "{}");
+  } catch {
+    return void 0;
+  }
+}
+async function resolveFriendCode(input) {
+  const code = normalizeFriendCode(input);
+  if (!code) return void 0;
+  const r = await dynamoDBClient.send(new GetItemCommand2({ TableName: HANDLE_TABLE, Key: marshall2({ Handle: handleForCode(code) }) }));
+  return r.Item ? unmarshall2(r.Item).PlayerID : void 0;
+}
+async function getRow(playerId, otherId) {
+  const r = await dynamoDBClient.send(
+    new GetItemCommand2({ TableName: FRIEND_TABLE, Key: marshall2({ PlayerID: playerId, OtherID: otherId }), ConsistentRead: true })
+  );
+  return r.Item ? unmarshall2(r.Item) : void 0;
+}
+var Reason = {
+  NotFound: "NotFound",
+  // 코드에 맞는 사람이 없음 (나를 막은 사람도 이렇게 보임)
+  Self: "Self",
+  // 나 자신
+  NoNickname: "NoNickname",
+  // 내 닉네임을 먼저 정해야 함
+  AlreadyFriends: "AlreadyFriends",
+  AlreadySent: "AlreadySent",
+  Blocked: "Blocked",
+  // 내가 막은 사람 (먼저 차단을 풀어야 함)
+  MyFriendsFull: "MyFriendsFull",
+  TheirFriendsFull: "TheirFriendsFull",
+  MySentFull: "MySentFull",
+  TheirInboxFull: "TheirInboxFull",
+  NoRequest: "NoRequest",
+  // 받은 요청이 없음 (상대가 취소함 등)
+  NotFriends: "NotFriends",
+  InvalidInput: "InvalidInput"
+};
+
+// getFriendProfile.ts
+var PLAYER_TABLE = "PlayerResources";
+var handler = async (event) => {
+  const me = getUserId(event);
+  if (!me) return createErrorResponse(401, "Unauthorized");
+  const body = parseBody(event.body);
+  try {
+    const other = await resolveFriendCode(String(body?.FriendCode ?? ""));
+    if (!other) return createErrorResponse(404, "Not found", { Reason: Reason.NotFound });
+    let since;
+    if (other !== me) {
+      const row = await getRow(me, other);
+      if (row?.Status !== "Friend") return createErrorResponse(403, "Not friends", { Reason: Reason.NotFriends });
+      since = row.UpdatedAt;
+    }
+    const [prof, res] = await Promise.all([
+      dynamoDBClient.send(new GetItemCommand3({ TableName: PROFILE_TABLE, Key: marshall3({ PlayerID: other }) })),
+      dynamoDBClient.send(
+        new GetItemCommand3({
+          TableName: PLAYER_TABLE,
+          Key: marshall3({ PlayerID: other }),
+          ProjectionExpression: "SelectedCharacterId, EquippedOutfits, AttendanceStreak, TotalAttendanceDays"
+        })
+      )
+    ]);
+    const p = prof.Item ? unmarshall3(prof.Item) : {};
+    const r = res.Item ? unmarshall3(res.Item) : {};
+    return createSuccessResponse({
+      Profile: {
+        FriendCode: p.FriendCode ? formatFriendCode(p.FriendCode) : "",
+        Nickname: p.Nickname ?? "",
+        NicknameTag: p.NicknameTag ?? 0,
+        IsMe: other === me,
+        FriendsSince: since ?? "",
+        SelectedCharacterId: r.SelectedCharacterId ?? "",
+        EquippedOutfits: r.EquippedOutfits ?? {},
+        AttendanceStreak: r.AttendanceStreak ?? 0,
+        TotalAttendanceDays: r.TotalAttendanceDays ?? 0,
+        BestRecords: p.BestRecords ?? {}
+      }
+    });
+  } catch (e) {
+    console.error("[GetFriendProfile] error", e);
+    return createErrorResponse(500, "Profile error", { Reason: "ServerError" });
+  }
+};
+export {
+  handler
+};
