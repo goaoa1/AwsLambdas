@@ -6,9 +6,10 @@ import {
   createSuccessResponse,
   createIdempotentHandler,
 } from 'quiz-utils/idempotencyUtils';
-import { DynamoDBClient, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-sdk/client-dynamodb';
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { getShuffledQuestionIDs, type ShuffledQuizData } from 'quiz-utils/quizManager';
+import { skillFor } from './characterSkills';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -49,9 +50,29 @@ const lambdaHandler = async (
     return createErrorResponse(404, `Quiz ${quizId} not found`);
   }
 
+  // 캐릭터 스킬(characterSkills.ts): 퀴즈를 시작할 때 고른 캐릭터를 세션에 적어 둔다.
+  // 퀴즈 도중 메뉴에서 캐릭터를 바꿔도 이 판에는 영향이 없다. 읽기에 실패하면 스킬 없이(배율 1) 진행한다.
+  let characterId: string | undefined;
+  try {
+    const player = await dynamoDBClient.send(
+      new GetItemCommand({
+        TableName: PLAYER_TABLE,
+        Key: marshall({ PlayerID: userId }),
+        ProjectionExpression: 'SelectedCharacterId',
+      })
+    );
+    characterId = player.Item?.SelectedCharacterId?.S;
+  } catch (error) {
+    console.error('[StartQuizSession] Failed to read SelectedCharacterId, playing without skill:', error);
+  }
+
   const now = new Date().toISOString();
   const nowMs = Date.now();
   const session = {
+    CharacterId: characterId,
+    SkillId: skillFor(characterId),
+    Streak: 0,
+    SkillBonus: 0,
     PlayerID: userId,
     QuizID: quizId,
     QuestionIDs: quizData.QuestionIDs,

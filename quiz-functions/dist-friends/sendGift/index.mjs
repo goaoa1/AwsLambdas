@@ -1,6 +1,6 @@
 // sendGift.ts
 import { createErrorResponse, createSuccessResponse } from "quiz-utils/idempotencyUtils";
-import { marshall as marshall4 } from "@aws-sdk/util-dynamodb";
+import { marshall as marshall5 } from "@aws-sdk/util-dynamodb";
 
 // friendStore.ts
 import { BatchGetItemCommand, GetItemCommand as GetItemCommand2, QueryCommand } from "@aws-sdk/client-dynamodb";
@@ -166,6 +166,23 @@ async function transact(items) {
   await dynamoDBClient.send(new TransactWriteItemsCommand2({ TransactItems: items }));
 }
 
+// achievementStats.ts
+import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand3, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { marshall as marshall4, unmarshall as unmarshall3 } from "@aws-sdk/util-dynamodb";
+var STATS_TABLE = "PlayerStats";
+var client = new DynamoDBClient2({ region: process.env.REGION || process.env.AWS_REGION });
+async function addCounter(playerId, field, by = 1) {
+  await client.send(
+    new UpdateItemCommand({
+      TableName: STATS_TABLE,
+      Key: marshall4({ PlayerID: playerId }),
+      UpdateExpression: "ADD #f :n",
+      ExpressionAttributeNames: { "#f": field },
+      ExpressionAttributeValues: marshall4({ ":n": by })
+    })
+  );
+}
+
 // sendGift.ts
 var handler = async (event) => {
   const me = getUserId(event);
@@ -186,21 +203,21 @@ var handler = async (event) => {
         {
           Update: {
             TableName: FRIEND_TABLE,
-            Key: marshall4({ PlayerID: me, OtherID: other }),
+            Key: marshall5({ PlayerID: me, OtherID: other }),
             UpdateExpression: "SET LastGiftDate = :today",
             ConditionExpression: "#s = :friend AND (attribute_not_exists(LastGiftDate) OR LastGiftDate <> :today)",
             ExpressionAttributeNames: { "#s": "Status" },
-            ExpressionAttributeValues: marshall4({ ":today": today, ":friend": "Friend" })
+            ExpressionAttributeValues: marshall5({ ":today": today, ":friend": "Friend" })
           }
         },
         {
           Update: {
             TableName: FRIEND_TABLE,
-            Key: marshall4({ PlayerID: other, OtherID: me }),
+            Key: marshall5({ PlayerID: other, OtherID: me }),
             UpdateExpression: "ADD GiftPending :one SET LastGiftAt = :now",
             ConditionExpression: "#s = :friend",
             ExpressionAttributeNames: { "#s": "Status" },
-            ExpressionAttributeValues: marshall4({ ":one": GIFT_STAMINA, ":now": now, ":friend": "Friend" })
+            ExpressionAttributeValues: marshall5({ ":one": GIFT_STAMINA, ":now": now, ":friend": "Friend" })
           }
         }
       ]);
@@ -209,6 +226,7 @@ var handler = async (event) => {
       return createErrorResponse(409, "Already gifted", { Reason: "AlreadyGifted" });
     }
     console.log(`[SendGift] ${me} -> ${other} (${today})`);
+    await addCounter(me, "GiftsSent").catch((e) => console.error("[SendGift] GiftsSent counter failed", e));
     return createSuccessResponse({ Result: "Gifted", ...await buildFriendLists(me) });
   } catch (e) {
     console.error("[SendGift] error", e);

@@ -8,6 +8,8 @@ import {
 } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { ensureItemsMap, grantItemsExpression } from './inventoryStore';
+import { ITEM_NAME } from './itemCatalog';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -17,6 +19,13 @@ function getKSTDateString(offsetDays = 0): string {
   const kstOffsetMs = 9 * 60 * 60 * 1000;
   const dayOffsetMs = offsetDays * 24 * 60 * 60 * 1000;
   return new Date(Date.now() + kstOffsetMs + dayOffsetMs).toISOString().slice(0, 10);
+}
+
+// 아이템 인벤토리 1단계: 연속 출석 보너스 아이템 (7일 주기로 3일째 작은 물약, 7일째 큰 물약)
+function calcBonusItems(streak: number): Record<string, number> {
+  if (streak % 7 === 0) return { Item_StaminaL: 1 };
+  if (streak % 7 === 3) return { Item_StaminaS: 1 };
+  return {};
 }
 
 function calcReward(streak: number): number {
@@ -39,6 +48,9 @@ const lambdaHandler = async (
 
   const todayKST = getKSTDateString(0);
   const yesterdayKST = getKSTDateString(-1);
+
+  // 보너스 아이템을 Items.#id 로 넣으려면 맵이 먼저 있어야 한다
+  await ensureItemsMap(userId);
 
   // 1. 현재 플레이어 데이터 읽기
   const getResult = await dynamoDBClient.send(
@@ -71,10 +83,14 @@ const lambdaHandler = async (
   const isFull = newStamina >= MAX_STAMINA;
   const now = new Date().toISOString();
 
+  const currentItems: Record<string, number> = {};
+  for (const [k, v] of Object.entries((playerData.Items as Record<string, unknown>) ?? {})) currentItems[k] = Number(v) || 0;
+  const bonus = grantItemsExpression(calcBonusItems(newStreak), currentItems, 'b');
+
   // 4. 원자적 업데이트 (condition으로 경쟁 조건에서도 중복 방지)
-  const updateExpression = isFull
-    ? 'SET LastAttendanceDate = :today, AttendanceStreak = :newStreak, TotalAttendanceDays = :newTotal, Stamina = :newStamina, UpdatedAt = :now REMOVE LastStaminaUpdateAt'
-    : 'SET LastAttendanceDate = :today, AttendanceStreak = :newStreak, TotalAttendanceDays = :newTotal, Stamina = :newStamina, UpdatedAt = :now';
+  const baseSet = 'SET LastAttendanceDate = :today, AttendanceStreak = :newStreak, TotalAttendanceDays = :newTotal, Stamina = :newStamina, UpdatedAt = :now'
+    + (bonus.sets.length ? ', ' + bonus.sets.join(', ') : '');
+  const updateExpression = isFull ? baseSet + ' REMOVE LastStaminaUpdateAt' : baseSet;
 
   try {
     await dynamoDBClient.send(
@@ -83,13 +99,16 @@ const lambdaHandler = async (
         Key: marshall({ PlayerID: userId }),
         UpdateExpression: updateExpression,
         ConditionExpression:
-          'attribute_not_exists(LastAttendanceDate) OR LastAttendanceDate <> :today',
+          '(attribute_not_exists(LastAttendanceDate) OR LastAttendanceDate <> :today)' +
+          (bonus.conds.length ? ' AND ' + bonus.conds.join(' AND ') : ''),
+        ...(Object.keys(bonus.names).length ? { ExpressionAttributeNames: bonus.names } : {}),
         ExpressionAttributeValues: marshall({
           ':today': todayKST,
           ':newStreak': newStreak,
           ':newTotal': newTotal,
           ':newStamina': newStamina,
           ':now': now,
+          ...bonus.values,
         }),
       })
     );
@@ -111,6 +130,8 @@ const lambdaHandler = async (
     NewStreak: newStreak,
     TotalDays: newTotal,
     UpdatedStamina: newStamina,
+    // 보너스 아이템 [{ ItemId, Name, Count }]
+    BonusItems: Object.entries(bonus.granted).map(([ItemId, Count]) => ({ ItemId, Name: ITEM_NAME(ItemId), Count })),
   });
 };
 

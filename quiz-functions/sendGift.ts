@@ -13,6 +13,7 @@ import { transact } from './friendActions';
 import { FRIEND_TABLE, Reason, getRow, getUserId, parseBody, resolveFriendCode } from './friendStore';
 import { isConditionFailure } from './profileStore';
 import { GIFT_STAMINA, todayKST } from './giftRules';
+import { addCounter } from './achievementStats';
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
   const me = getUserId(event);
@@ -57,6 +58,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       return createErrorResponse(409, 'Already gifted', { Reason: 'AlreadyGifted' });
     }
     console.log(`[SendGift] ${me} -> ${other} (${today})`);
+    // 도전과제 '선물 보내기' 진행도 (실패해도 선물은 이미 갔으므로 막지 않는다)
+    await addCounter(me, 'GiftsSent').catch((e) => console.error('[SendGift] GiftsSent counter failed', e));
     return createSuccessResponse({ Result: 'Gifted', ...(await buildFriendLists(me)) });
   } catch (e) {
     console.error('[SendGift] error', e);
