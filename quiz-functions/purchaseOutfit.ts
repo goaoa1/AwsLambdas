@@ -2,7 +2,7 @@
 // purchaseOutfit.ts - 크레딧으로 의상 구매
 //   POST /purchase-outfit  { OutfitId }
 //   헤더 X-Idempotency-Key / X-Idempotency-Timestamp 필요 (ITEM_PURCHASE)
-//   409: 크레딧 부족 / 이미 보유
+//   409: 크레딧 부족 / 이미 보유 / 팔지 않는 의상(NotForSale, 도전과제 보상)
 // ========================================
 
 import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-lambda';
@@ -15,7 +15,7 @@ import {
 } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { findOutfit } from './shopCatalog';
+import { findOutfit, isForSale } from './shopCatalog';
 import { readShopState } from './shopState';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
@@ -47,6 +47,10 @@ const lambdaHandler = async (
   const outfit = findOutfit(outfitId);
   if (!outfit) {
     return createErrorResponse(404, 'Unknown outfit');
+  }
+  if (!isForSale(outfit)) {
+    // 도전과제 보상 의상은 claim-achievement 로만 받는다
+    return createErrorResponse(409, 'Not for sale', { Reason: 'NotForSale' });
   }
 
   // 1. 현재 상태 확인 (이미 보유했으면 409)

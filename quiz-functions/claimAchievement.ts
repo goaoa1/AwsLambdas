@@ -4,6 +4,7 @@
 //     PlayerAchievements.ClaimedTiers  n → n+1 (조건: 지금 n 이어야 함 → 두 번 받기 방지)
 //     PlayerResources                  Credits 더하기, Stamina 는 회복분 포함 최대 10까지 (선물 받기와 같은 규칙)
 //   칭호는 받은 단계에서 계산하므로 따로 저장하지 않는다 (3단계에서 장착).
+//   전용 의상(Reward.Outfit)은 PlayerResources.OwnedOutfits 에 더한다 (상점에서 산 의상과 같은 목록 → 상점에서 입기).
 //   오류 Reason: UnknownAchievement / NotReached / AllClaimed / Locked(준비 중 보상) / StaminaFull / Conflict
 // ========================================
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
@@ -51,9 +52,10 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   const staminaReward = tier.Reward.Stamina ?? 0;
   const itemReward = tier.Reward.Items ?? {};
   const hasItems = Object.values(itemReward).some((n) => n > 0);
+  const outfitReward = tier.Reward.Outfit ?? '';
   let staminaGranted = 0;
   let itemsGranted: Record<string, number> = {};
-  if (credits > 0 || staminaReward > 0 || hasItems) {
+  if (credits > 0 || staminaReward > 0 || hasItems || outfitReward) {
     const sets: string[] = ['UpdatedAt = :now'];
     const removes: string[] = [];
     const values: Record<string, unknown> = { ':now': nowIso };
@@ -72,6 +74,20 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Object.assign(values, g.values);
       names = g.names;
       itemsGranted = g.granted;
+    }
+    if (outfitReward) {
+      // 이미 가지고 있으면(있을 수 없지만) 목록은 그대로 두고 단계만 받은 것으로 한다
+      const r = await client.send(
+        new GetItemCommand({ TableName: PLAYER_TABLE, Key: marshall({ PlayerID: me }), ProjectionExpression: 'OwnedOutfits' })
+      );
+      const owned = ((r.Item ? unmarshall(r.Item) : {}).OwnedOutfits as unknown[] | undefined) ?? [];
+      if (!owned.includes(outfitReward)) {
+        sets.push('OwnedOutfits = list_append(if_not_exists(OwnedOutfits, :emptyList), :newOutfit)');
+        conds.push('(attribute_not_exists(OwnedOutfits) OR NOT contains(OwnedOutfits, :outfitId))');
+        values[':emptyList'] = [];
+        values[':newOutfit'] = [outfitReward];
+        values[':outfitId'] = outfitReward;
+      }
     }
     if (credits > 0) {
       sets.push('Credits = if_not_exists(Credits, :zero) + :credits');
@@ -127,7 +143,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     return createErrorResponse(500, 'Failed to claim');
   }
 
-  console.log(`[ClaimAchievement] ${me} ${a.Id} tier ${claimed + 1}/${a.Tiers.length} credits=${credits} stamina=${staminaGranted}`);
+  console.log(`[ClaimAchievement] ${me} ${a.Id} tier ${claimed + 1}/${a.Tiers.length} credits=${credits} stamina=${staminaGranted}${outfitReward ? ` outfit=${outfitReward}` : ''}`);
   return createSuccessResponse({
     Claimed: {
       AchievementId: a.Id,
@@ -136,6 +152,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Stamina: staminaGranted,
       Title: tier.Reward.Title ?? '',
       TitleName: tier.Reward.Title ? TITLES[tier.Reward.Title] ?? '' : '',
+      Outfit: outfitReward,
       Items: Object.entries(itemsGranted).map(([ItemId, Count]) => ({ ItemId, Name: ITEM_NAME(ItemId), Count })),
     },
     ...(await buildAchievementList(me)),

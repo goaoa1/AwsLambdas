@@ -16,10 +16,18 @@ var OUTFITS = [
   // 001 피팅은 아직 미완성
   { OutfitId: "Outfit_PlaidSkirt", Price: 300, Characters: ["Char_003"], Slot: "Bottom" },
   { OutfitId: "Outfit_Summer", Price: 450, Characters: ["Char_003"], Slot: "Set" },
-  { OutfitId: "Outfit_Formal", Price: 800, Characters: [], Slot: "Set" }
+  { OutfitId: "Outfit_Formal", Price: 800, Characters: [], Slot: "Set" },
+  // 도전과제 '누적 정답' 4단계(5000개) 보상 (achievementCatalog.ts EXCLUSIVE_OUTFITS_READY 와 같이 바꾼다)
+  { OutfitId: "Outfit_Exclusive_Scholar", Price: 0, Characters: ["Char_003"], Slot: "Set", Source: "Achievement" },
+  // 액세서리 (사용자: 크레딧으로 사고, BC003 먼저, 어떤 옷과도 같이. 흰 블라우스의 원래 리본은 클라이언트가 숨긴다)
+  { OutfitId: "Outfit_Acc_Ribbon", Price: 60, Characters: ["Char_003"], Slot: "Accessory" },
+  { OutfitId: "Outfit_Acc_Necktie", Price: 80, Characters: ["Char_003"], Slot: "Accessory" }
 ];
 function findOutfit(outfitId) {
   return OUTFITS.find((o) => o.OutfitId === outfitId);
+}
+function isForSale(outfit) {
+  return outfit.Source !== "Achievement" && outfit.Price > 0;
 }
 
 // shopState.ts
@@ -59,6 +67,9 @@ var lambdaHandler = async (event, _context) => {
   const outfit = findOutfit(outfitId);
   if (!outfit) {
     return createErrorResponse(404, "Unknown outfit");
+  }
+  if (!isForSale(outfit)) {
+    return createErrorResponse(409, "Not for sale", { Reason: "NotForSale" });
   }
   const getResult = await dynamoDBClient.send(
     new GetItemCommand({

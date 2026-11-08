@@ -15,41 +15,6 @@ import {
   TransactionCanceledException
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
-var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
-
-// friendStore.ts
-var FRIEND_TABLE = "Friends";
-function getUserId(event) {
-  return event.requestContext?.authorizer?.claims?.sub;
-}
-function parseBody(body) {
-  try {
-    return JSON.parse(body || "{}");
-  } catch {
-    return void 0;
-  }
-}
-async function listRows(playerId) {
-  const rows = [];
-  let start;
-  do {
-    const r = await dynamoDBClient.send(
-      new QueryCommand({
-        TableName: FRIEND_TABLE,
-        KeyConditionExpression: "PlayerID = :p",
-        ExpressionAttributeValues: marshall2({ ":p": playerId }),
-        ExclusiveStartKey: start,
-        ConsistentRead: true
-      })
-    );
-    for (const it of r.Items ?? []) rows.push(unmarshall2(it));
-    start = r.LastEvaluatedKey;
-  } while (start);
-  return rows;
-}
-function countStatus(rows, status) {
-  return rows.filter((r) => r.Status === status).length;
-}
 
 // achievementCatalog.ts
 var TABLE_QUIZ_IDS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
@@ -61,7 +26,7 @@ var TITLES = {
   Title_Lucky: "\uD589\uC6B4\uC544",
   Title_Focus: "\uBAB0\uC785\uC758 \uB2EC\uC778"
 };
-var EXCLUSIVE_OUTFITS_READY = /* @__PURE__ */ new Set([]);
+var EXCLUSIVE_OUTFITS_READY = /* @__PURE__ */ new Set(["Outfit_Exclusive_Scholar"]);
 var ACHIEVEMENTS = [
   // ---- 플레이·클리어 ----
   {
@@ -223,6 +188,43 @@ function tierReached(a, progress, tier) {
 }
 function tierLocked(tier) {
   return !!tier.Reward.Outfit && !EXCLUSIVE_OUTFITS_READY.has(tier.Reward.Outfit);
+}
+
+// profileStore.ts
+var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
+
+// friendStore.ts
+var FRIEND_TABLE = "Friends";
+function getUserId(event) {
+  return event.requestContext?.authorizer?.claims?.sub;
+}
+function parseBody(body) {
+  try {
+    return JSON.parse(body || "{}");
+  } catch {
+    return void 0;
+  }
+}
+async function listRows(playerId) {
+  const rows = [];
+  let start;
+  do {
+    const r = await dynamoDBClient.send(
+      new QueryCommand({
+        TableName: FRIEND_TABLE,
+        KeyConditionExpression: "PlayerID = :p",
+        ExpressionAttributeValues: marshall2({ ":p": playerId }),
+        ExclusiveStartKey: start,
+        ConsistentRead: true
+      })
+    );
+    for (const it of r.Items ?? []) rows.push(unmarshall2(it));
+    start = r.LastEvaluatedKey;
+  } while (start);
+  return rows;
+}
+function countStatus(rows, status) {
+  return rows.filter((r) => r.Status === status).length;
 }
 
 // achievementProgress.ts
@@ -458,9 +460,10 @@ var handler = async (event) => {
   const staminaReward = tier.Reward.Stamina ?? 0;
   const itemReward = tier.Reward.Items ?? {};
   const hasItems = Object.values(itemReward).some((n) => n > 0);
+  const outfitReward = tier.Reward.Outfit ?? "";
   let staminaGranted = 0;
   let itemsGranted = {};
-  if (credits > 0 || staminaReward > 0 || hasItems) {
+  if (credits > 0 || staminaReward > 0 || hasItems || outfitReward) {
     const sets = ["UpdatedAt = :now"];
     const removes = [];
     const values = { ":now": nowIso };
@@ -479,6 +482,19 @@ var handler = async (event) => {
       Object.assign(values, g.values);
       names = g.names;
       itemsGranted = g.granted;
+    }
+    if (outfitReward) {
+      const r = await client4.send(
+        new GetItemCommand6({ TableName: PLAYER_TABLE, Key: marshall6({ PlayerID: me }), ProjectionExpression: "OwnedOutfits" })
+      );
+      const owned = (r.Item ? unmarshall6(r.Item) : {}).OwnedOutfits ?? [];
+      if (!owned.includes(outfitReward)) {
+        sets.push("OwnedOutfits = list_append(if_not_exists(OwnedOutfits, :emptyList), :newOutfit)");
+        conds.push("(attribute_not_exists(OwnedOutfits) OR NOT contains(OwnedOutfits, :outfitId))");
+        values[":emptyList"] = [];
+        values[":newOutfit"] = [outfitReward];
+        values[":outfitId"] = outfitReward;
+      }
     }
     if (credits > 0) {
       sets.push("Credits = if_not_exists(Credits, :zero) + :credits");
@@ -532,7 +548,7 @@ var handler = async (event) => {
     console.error("[ClaimAchievement]", e);
     return createErrorResponse(500, "Failed to claim");
   }
-  console.log(`[ClaimAchievement] ${me} ${a.Id} tier ${claimed + 1}/${a.Tiers.length} credits=${credits} stamina=${staminaGranted}`);
+  console.log(`[ClaimAchievement] ${me} ${a.Id} tier ${claimed + 1}/${a.Tiers.length} credits=${credits} stamina=${staminaGranted}${outfitReward ? ` outfit=${outfitReward}` : ""}`);
   return createSuccessResponse({
     Claimed: {
       AchievementId: a.Id,
@@ -541,6 +557,7 @@ var handler = async (event) => {
       Stamina: staminaGranted,
       Title: tier.Reward.Title ?? "",
       TitleName: tier.Reward.Title ? TITLES[tier.Reward.Title] ?? "" : "",
+      Outfit: outfitReward,
       Items: Object.entries(itemsGranted).map(([ItemId, Count]) => ({ ItemId, Name: ITEM_NAME(ItemId), Count }))
     },
     ...await buildAchievementList(me)

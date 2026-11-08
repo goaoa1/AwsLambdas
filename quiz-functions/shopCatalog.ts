@@ -6,13 +6,17 @@
 
 // 의상이 차지하는 부위. 클라이언트 UOutfitDataAsset::Slot 과 반드시 일치해야 한다.
 // 캐릭터는 부위마다 하나씩 입는다: 상의와 하의는 따로, 세트는 상의·하의 자리를 모두 차지한다.
-export type OutfitSlot = 'Top' | 'Bottom' | 'Set';
+// Accessory(리본·넥타이)는 상의·하의·세트와 겹치지 않고, 액세서리끼리만 겹친다 (2026-11-08)
+export type OutfitSlot = 'Top' | 'Bottom' | 'Set' | 'Accessory';
 
 export interface OutfitEntry {
   OutfitId: string;
   Price: number;        // 크레딧
   Characters: string[]; // 입을 수 있는 캐릭터. 비어 있으면 모든 캐릭터
   Slot: OutfitSlot;
+  // 'Achievement' = 도전과제 보상 전용 의상. 팔지 않고(Price 0, 구매 거절) 도전과제 보상으로만 OwnedOutfits 에 들어간다.
+  // 받은 뒤에는 산 의상과 똑같이 입고 벗을 수 있다. 클라이언트는 Price <= 0 을 '도전과제 보상'으로 표시한다.
+  Source?: 'Achievement';
 }
 
 export interface CreditPackEntry {
@@ -27,6 +31,11 @@ export const OUTFITS: OutfitEntry[] = [
   { OutfitId: 'Outfit_PlaidSkirt',  Price: 300, Characters: ['Char_003'],             Slot: 'Bottom' },
   { OutfitId: 'Outfit_Summer',      Price: 450, Characters: ['Char_003'],             Slot: 'Set' },
   { OutfitId: 'Outfit_Formal',      Price: 800, Characters: [],                       Slot: 'Set' },
+  // 도전과제 '누적 정답' 4단계(5000개) 보상 (achievementCatalog.ts EXCLUSIVE_OUTFITS_READY 와 같이 바꾼다)
+  { OutfitId: 'Outfit_Exclusive_Scholar', Price: 0, Characters: ['Char_003'],       Slot: 'Set', Source: 'Achievement' },
+  // 액세서리 (사용자: 크레딧으로 사고, BC003 먼저, 어떤 옷과도 같이. 흰 블라우스의 원래 리본은 클라이언트가 숨긴다)
+  { OutfitId: 'Outfit_Acc_Ribbon',  Price: 60, Characters: ['Char_003'],              Slot: 'Accessory' },
+  { OutfitId: 'Outfit_Acc_Necktie', Price: 80, Characters: ['Char_003'],              Slot: 'Accessory' },
 ];
 
 // EquippedOutfits 키: "Char_003#Top" / "Char_003#Bottom" / "Char_003#Set". 부위가 나뉘기 전 옛 키는 "Char_003"
@@ -34,7 +43,7 @@ export function splitEquipKey(key: string): { characterId: string; slot: OutfitS
   const i = key.indexOf('#');
   if (i < 0) return { characterId: key, slot: '' };
   const s = key.slice(i + 1);
-  return { characterId: key.slice(0, i), slot: s === 'Top' || s === 'Bottom' ? s : 'Set' };
+  return { characterId: key.slice(0, i), slot: s === 'Top' || s === 'Bottom' || s === 'Accessory' ? s : 'Set' };
 }
 
 export function slotOf(outfitId: string): OutfitSlot {
@@ -42,6 +51,7 @@ export function slotOf(outfitId: string): OutfitSlot {
 }
 
 export function slotsOverlap(a: OutfitSlot, b: OutfitSlot): boolean {
+  if (a === 'Accessory' || b === 'Accessory') return a === b;
   return a === b || a === 'Set' || b === 'Set';
 }
 
@@ -82,6 +92,11 @@ export const SANDBOX_MAX_CREDITS = 1200;
 
 export function findOutfit(outfitId: string): OutfitEntry | undefined {
   return OUTFITS.find((o) => o.OutfitId === outfitId);
+}
+
+/** 크레딧으로 살 수 있는 의상인가 (도전과제 보상 의상은 못 산다) */
+export function isForSale(outfit: OutfitEntry): boolean {
+  return outfit.Source !== 'Achievement' && outfit.Price > 0;
 }
 
 export function findCreditPack(productId: string): CreditPackEntry | undefined {

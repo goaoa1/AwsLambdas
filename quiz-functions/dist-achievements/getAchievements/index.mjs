@@ -13,38 +13,6 @@ import {
   TransactionCanceledException
 } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
-var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
-
-// friendStore.ts
-var FRIEND_TABLE = "Friends";
-function getUserId(event) {
-  return event.requestContext?.authorizer?.claims?.sub;
-}
-async function listRows(playerId) {
-  const rows = [];
-  let start;
-  do {
-    const r = await dynamoDBClient.send(
-      new QueryCommand({
-        TableName: FRIEND_TABLE,
-        KeyConditionExpression: "PlayerID = :p",
-        ExpressionAttributeValues: marshall2({ ":p": playerId }),
-        ExclusiveStartKey: start,
-        ConsistentRead: true
-      })
-    );
-    for (const it of r.Items ?? []) rows.push(unmarshall2(it));
-    start = r.LastEvaluatedKey;
-  } while (start);
-  return rows;
-}
-function countStatus(rows, status) {
-  return rows.filter((r) => r.Status === status).length;
-}
-
-// achievementProgress.ts
-import { DynamoDBClient as DynamoDBClient3, GetItemCommand as GetItemCommand4, QueryCommand as QueryCommand2 } from "@aws-sdk/client-dynamodb";
-import { marshall as marshall4, unmarshall as unmarshall4 } from "@aws-sdk/util-dynamodb";
 
 // achievementCatalog.ts
 var TABLE_QUIZ_IDS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
@@ -56,7 +24,7 @@ var TITLES = {
   Title_Lucky: "\uD589\uC6B4\uC544",
   Title_Focus: "\uBAB0\uC785\uC758 \uB2EC\uC778"
 };
-var EXCLUSIVE_OUTFITS_READY = /* @__PURE__ */ new Set([]);
+var EXCLUSIVE_OUTFITS_READY = /* @__PURE__ */ new Set(["Outfit_Exclusive_Scholar"]);
 var ACHIEVEMENTS = [
   // ---- 플레이·클리어 ----
   {
@@ -216,6 +184,40 @@ function tierReached(a, progress, tier) {
 function tierLocked(tier) {
   return !!tier.Reward.Outfit && !EXCLUSIVE_OUTFITS_READY.has(tier.Reward.Outfit);
 }
+
+// profileStore.ts
+var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
+
+// friendStore.ts
+var FRIEND_TABLE = "Friends";
+function getUserId(event) {
+  return event.requestContext?.authorizer?.claims?.sub;
+}
+async function listRows(playerId) {
+  const rows = [];
+  let start;
+  do {
+    const r = await dynamoDBClient.send(
+      new QueryCommand({
+        TableName: FRIEND_TABLE,
+        KeyConditionExpression: "PlayerID = :p",
+        ExpressionAttributeValues: marshall2({ ":p": playerId }),
+        ExclusiveStartKey: start,
+        ConsistentRead: true
+      })
+    );
+    for (const it of r.Items ?? []) rows.push(unmarshall2(it));
+    start = r.LastEvaluatedKey;
+  } while (start);
+  return rows;
+}
+function countStatus(rows, status) {
+  return rows.filter((r) => r.Status === status).length;
+}
+
+// achievementProgress.ts
+import { DynamoDBClient as DynamoDBClient3, GetItemCommand as GetItemCommand4, QueryCommand as QueryCommand2 } from "@aws-sdk/client-dynamodb";
+import { marshall as marshall4, unmarshall as unmarshall4 } from "@aws-sdk/util-dynamodb";
 
 // achievementStats.ts
 import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand3, UpdateItemCommand } from "@aws-sdk/client-dynamodb";

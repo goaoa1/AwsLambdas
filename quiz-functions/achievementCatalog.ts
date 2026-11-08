@@ -58,8 +58,9 @@ export const TITLES: Record<string, string> = {
   Title_Focus: '몰입의 달인',
 };
 
-// 전용 의상 (4단계에서 만듦). 여기 없는 의상 보상 단계는 '준비 중'
-export const EXCLUSIVE_OUTFITS_READY = new Set<string>([]);
+// 전용 의상 (4단계). 여기 없는 의상 보상 단계는 '준비 중'(Locked).
+// 넣을 때는 shopCatalog.ts OUTFITS 에도 Source: 'Achievement' 로 같은 OutfitId 를 넣고, 클라이언트 DA_Outfit_* 를 만든다.
+export const EXCLUSIVE_OUTFITS_READY = new Set<string>(['Outfit_Exclusive_Scholar']);
 
 export const ACHIEVEMENTS: Achievement[] = [
   // ---- 플레이·클리어 ----
