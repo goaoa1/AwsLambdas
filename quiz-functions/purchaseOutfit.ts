@@ -15,7 +15,8 @@ import {
 } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { findOutfit, isForSale } from './shopCatalog';
+import { findOutfit, isForSale, isStoryLocked } from './shopCatalog';
+import { hasUnlock, readStory } from './storyStore';
 import { readShopState } from './shopState';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
@@ -51,6 +52,13 @@ const lambdaHandler = async (
   if (!isForSale(outfit)) {
     // 도전과제 보상 의상은 claim-achievement 로만 받는다
     return createErrorResponse(409, 'Not for sale', { Reason: 'NotForSale' });
+  }
+  if (outfit.Source === 'Story') {
+    // 스토리 해금 전에는 못 산다 (2026-11-09)
+    const story = await readStory(userId);
+    if (isStoryLocked(outfit, (id) => hasUnlock(story, id))) {
+      return createErrorResponse(409, 'Locked until the story unlocks it', { Reason: 'StoryLocked' });
+    }
   }
 
   // 1. 현재 상태 확인 (이미 보유했으면 409)

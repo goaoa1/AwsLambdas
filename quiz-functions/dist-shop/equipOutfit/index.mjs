@@ -6,8 +6,8 @@ import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 // shopCatalog.ts
 var OUTFITS = [
   { OutfitId: "Outfit_Navy", Price: 300, Characters: ["Char_003", "Char_001"], Slot: "Set" },
-  { OutfitId: "Outfit_WhiteBlouse", Price: 350, Characters: ["Char_003"], Slot: "Top" },
-  // 001 피팅은 아직 미완성
+  { OutfitId: "Outfit_WhiteBlouse", Price: 350, Characters: ["Char_003"], Slot: "Top", Source: "Story", Unlock: "shop_item_blouse" },
+  // 서윤 10화에서 해금. 001 피팅은 아직 미완성
   { OutfitId: "Outfit_PlaidSkirt", Price: 300, Characters: ["Char_003"], Slot: "Bottom" },
   { OutfitId: "Outfit_Summer", Price: 450, Characters: ["Char_003"], Slot: "Set" },
   { OutfitId: "Outfit_Formal", Price: 800, Characters: [], Slot: "Set" },

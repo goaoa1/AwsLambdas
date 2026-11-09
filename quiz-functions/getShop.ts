@@ -7,7 +7,8 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-l
 import { createErrorResponse, createSuccessResponse } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
-import { CREDIT_PACKS, OUTFITS } from './shopCatalog';
+import { CREDIT_PACKS, OUTFITS, isStoryLocked } from './shopCatalog';
+import { hasUnlock, normalizeCharState, type StoryMap } from './storyStore';
 import { readShopState } from './shopState';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
@@ -28,17 +29,24 @@ export const handler = async (
     new GetItemCommand({
       TableName: PLAYER_TABLE,
       Key: marshall({ PlayerID: userId }),
-      ProjectionExpression: 'Credits, OwnedOutfits, EquippedOutfits',
+      ProjectionExpression: 'Credits, OwnedOutfits, EquippedOutfits, #story',
+      ExpressionAttributeNames: { '#story': 'Story' },
     })
   );
 
-  const state = readShopState(getResult.Item ? unmarshall(getResult.Item) : undefined);
+  const row = getResult.Item ? unmarshall(getResult.Item) : undefined;
+  const state = readShopState(row);
+  // 스토리 해금 전 의상 (2026-11-09)
+  const story: StoryMap = {};
+  for (const [k, v] of Object.entries(((row?.Story as Record<string, unknown>) ?? {}))) story[k] = normalizeCharState(v);
+  const lockedOutfits = OUTFITS.filter((o) => isStoryLocked(o, (id) => hasUnlock(story, id))).map((o) => o.OutfitId);
 
   return createSuccessResponse({
     Credits: state.Credits,
     OwnedOutfits: state.OwnedOutfits,
     EquippedOutfits: state.EquippedOutfits,
     Outfits: OUTFITS,
+    LockedOutfits: lockedOutfits,
     CreditPacks: CREDIT_PACKS,
     SandboxPurchaseAllowed: process.env.ALLOW_SANDBOX_PURCHASE === 'true',
   });

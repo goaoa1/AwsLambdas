@@ -16,7 +16,10 @@ export interface OutfitEntry {
   Slot: OutfitSlot;
   // 'Achievement' = 도전과제 보상 전용 의상. 팔지 않고(Price 0, 구매 거절) 도전과제 보상으로만 OwnedOutfits 에 들어간다.
   // 받은 뒤에는 산 의상과 똑같이 입고 벗을 수 있다. 클라이언트는 Price <= 0 을 '도전과제 보상'으로 표시한다.
-  Source?: 'Achievement';
+  // 'Story' = 스토리 해금 의상 (2026-11-09). 평소처럼 크레딧으로 사지만, Unlock 에 적힌 해금 id 가 PlayerResources.Story 에
+  // 들어오기 전에는 상점에서 잠겨 보이고(get-shop LockedOutfits) 구매가 거절된다(409 StoryLocked).
+  Source?: 'Achievement' | 'Story';
+  Unlock?: string;
 }
 
 export interface CreditPackEntry {
@@ -27,7 +30,7 @@ export interface CreditPackEntry {
 
 export const OUTFITS: OutfitEntry[] = [
   { OutfitId: 'Outfit_Navy',        Price: 300, Characters: ['Char_003', 'Char_001'], Slot: 'Set' },
-  { OutfitId: 'Outfit_WhiteBlouse', Price: 350, Characters: ['Char_003'],             Slot: 'Top' },  // 001 피팅은 아직 미완성
+  { OutfitId: 'Outfit_WhiteBlouse', Price: 350, Characters: ['Char_003'],             Slot: 'Top', Source: 'Story', Unlock: 'shop_item_blouse' },  // 서윤 10화에서 해금. 001 피팅은 아직 미완성
   { OutfitId: 'Outfit_PlaidSkirt',  Price: 300, Characters: ['Char_003'],             Slot: 'Bottom' },
   { OutfitId: 'Outfit_Summer',      Price: 450, Characters: ['Char_003'],             Slot: 'Set' },
   { OutfitId: 'Outfit_Formal',      Price: 800, Characters: [],                       Slot: 'Set' },
@@ -97,6 +100,11 @@ export function findOutfit(outfitId: string): OutfitEntry | undefined {
 /** 크레딧으로 살 수 있는 의상인가 (도전과제 보상 의상은 못 산다) */
 export function isForSale(outfit: OutfitEntry): boolean {
   return outfit.Source !== 'Achievement' && outfit.Price > 0;
+}
+
+/** 스토리 해금 전이라 아직 잠긴 의상인가. unlocked = 플레이어 Story 에서 모은 해금 id (storyStore.hasUnlock) */
+export function isStoryLocked(outfit: OutfitEntry, hasUnlock: (id: string) => boolean): boolean {
+  return outfit.Source === 'Story' && !!outfit.Unlock && !hasUnlock(outfit.Unlock);
 }
 
 export function findCreditPack(productId: string): CreditPackEntry | undefined {

@@ -6,14 +6,14 @@ import {
   createSuccessResponse,
   createIdempotentHandler
 } from "quiz-utils/idempotencyUtils";
-import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
-import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand2, UpdateItemCommand as UpdateItemCommand2 } from "@aws-sdk/client-dynamodb";
+import { marshall as marshall2, unmarshall as unmarshall2 } from "@aws-sdk/util-dynamodb";
 
 // shopCatalog.ts
 var OUTFITS = [
   { OutfitId: "Outfit_Navy", Price: 300, Characters: ["Char_003", "Char_001"], Slot: "Set" },
-  { OutfitId: "Outfit_WhiteBlouse", Price: 350, Characters: ["Char_003"], Slot: "Top" },
-  // 001 피팅은 아직 미완성
+  { OutfitId: "Outfit_WhiteBlouse", Price: 350, Characters: ["Char_003"], Slot: "Top", Source: "Story", Unlock: "shop_item_blouse" },
+  // 서윤 10화에서 해금. 001 피팅은 아직 미완성
   { OutfitId: "Outfit_PlaidSkirt", Price: 300, Characters: ["Char_003"], Slot: "Bottom" },
   { OutfitId: "Outfit_Summer", Price: 450, Characters: ["Char_003"], Slot: "Set" },
   { OutfitId: "Outfit_Formal", Price: 800, Characters: [], Slot: "Set" },
@@ -28,6 +28,58 @@ function findOutfit(outfitId) {
 }
 function isForSale(outfit) {
   return outfit.Source !== "Achievement" && outfit.Price > 0;
+}
+function isStoryLocked(outfit, hasUnlock2) {
+  return outfit.Source === "Story" && !!outfit.Unlock && !hasUnlock2(outfit.Unlock);
+}
+
+// storyStore.ts
+import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
+import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+var PLAYER_TABLE = "PlayerResources";
+var client = new DynamoDBClient({ region: process.env.REGION || process.env.AWS_REGION });
+var strList = (v) => {
+  if (Array.isArray(v)) return v.map(String);
+  if (v instanceof Set) return [...v].map(String);
+  return [];
+};
+function normalizeCharState(raw) {
+  const r = raw && typeof raw === "object" ? raw : {};
+  const choices = {};
+  if (r.Choices && typeof r.Choices === "object") for (const [k, v] of Object.entries(r.Choices)) choices[k] = String(v);
+  return {
+    Affinity: Math.max(0, Math.floor(Number(r.Affinity) || 0)),
+    Seen: strList(r.Seen),
+    Events: strList(r.Events),
+    Flags: strList(r.Flags),
+    Unlocked: strList(r.Unlocked),
+    Claimed: strList(r.Claimed),
+    Choices: choices,
+    LastEpisodeDate: typeof r.LastEpisodeDate === "string" ? r.LastEpisodeDate : "",
+    TapDate: typeof r.TapDate === "string" ? r.TapDate : "",
+    TapPointsToday: Math.max(0, Math.floor(Number(r.TapPointsToday) || 0)),
+    UpdatedAt: typeof r.UpdatedAt === "string" ? r.UpdatedAt : ""
+  };
+}
+async function readStoryRow(playerId) {
+  const r = await client.send(
+    new GetItemCommand({
+      TableName: PLAYER_TABLE,
+      Key: marshall({ PlayerID: playerId }),
+      ProjectionExpression: "PlayerID, #story, AttendanceStreak, TotalAttendanceDays, OwnedOutfits",
+      ExpressionAttributeNames: { "#story": "Story" }
+    })
+  );
+  const row = r.Item ? unmarshall(r.Item) : {};
+  const story = {};
+  for (const [k, v] of Object.entries(row.Story ?? {})) story[k] = normalizeCharState(v);
+  return { Story: story, Row: row };
+}
+async function readStory(playerId) {
+  return (await readStoryRow(playerId)).Story;
+}
+function hasUnlock(story, unlockId) {
+  return Object.values(story).some((s) => s.Unlocked.includes(unlockId));
 }
 
 // shopState.ts
@@ -45,8 +97,8 @@ function readShopState(playerData) {
 }
 
 // purchaseOutfit.ts
-var dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
-var PLAYER_TABLE = "PlayerResources";
+var dynamoDBClient = new DynamoDBClient2({ region: process.env.REGION });
+var PLAYER_TABLE2 = "PlayerResources";
 var lambdaHandler = async (event, _context) => {
   console.log("[PurchaseOutfit] Lambda invoked");
   const validation = validateIdempotencyKey(event, IdempotencyType.ITEM_PURCHASE);
@@ -71,17 +123,23 @@ var lambdaHandler = async (event, _context) => {
   if (!isForSale(outfit)) {
     return createErrorResponse(409, "Not for sale", { Reason: "NotForSale" });
   }
+  if (outfit.Source === "Story") {
+    const story = await readStory(userId);
+    if (isStoryLocked(outfit, (id) => hasUnlock(story, id))) {
+      return createErrorResponse(409, "Locked until the story unlocks it", { Reason: "StoryLocked" });
+    }
+  }
   const getResult = await dynamoDBClient.send(
-    new GetItemCommand({
-      TableName: PLAYER_TABLE,
-      Key: marshall({ PlayerID: userId }),
+    new GetItemCommand2({
+      TableName: PLAYER_TABLE2,
+      Key: marshall2({ PlayerID: userId }),
       ProjectionExpression: "Credits, OwnedOutfits"
     })
   );
   if (!getResult.Item) {
     return createErrorResponse(404, "Player not found");
   }
-  const state = readShopState(unmarshall(getResult.Item));
+  const state = readShopState(unmarshall2(getResult.Item));
   if (state.OwnedOutfits.includes(outfitId)) {
     return createErrorResponse(409, "Already owned", { Reason: "AlreadyOwned", Credits: state.Credits });
   }
@@ -95,12 +153,12 @@ var lambdaHandler = async (event, _context) => {
   const now = (/* @__PURE__ */ new Date()).toISOString();
   try {
     const result = await dynamoDBClient.send(
-      new UpdateItemCommand({
-        TableName: PLAYER_TABLE,
-        Key: marshall({ PlayerID: userId }),
+      new UpdateItemCommand2({
+        TableName: PLAYER_TABLE2,
+        Key: marshall2({ PlayerID: userId }),
         UpdateExpression: "SET Credits = Credits - :price, OwnedOutfits = list_append(if_not_exists(OwnedOutfits, :empty), :newItem), UpdatedAt = :now",
         ConditionExpression: "Credits >= :price AND (attribute_not_exists(OwnedOutfits) OR NOT contains(OwnedOutfits, :outfitId))",
-        ExpressionAttributeValues: marshall({
+        ExpressionAttributeValues: marshall2({
           ":price": outfit.Price,
           ":empty": [],
           ":newItem": [outfitId],
@@ -110,7 +168,7 @@ var lambdaHandler = async (event, _context) => {
         ReturnValues: "ALL_NEW"
       })
     );
-    const updated = readShopState(unmarshall(result.Attributes));
+    const updated = readShopState(unmarshall2(result.Attributes));
     console.log(`[PurchaseOutfit] Player ${userId} bought ${outfitId} for ${outfit.Price}. Credits ${state.Credits} -> ${updated.Credits}`);
     return createSuccessResponse({
       OutfitId: outfitId,
