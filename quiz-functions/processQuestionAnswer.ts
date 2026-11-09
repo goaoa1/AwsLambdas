@@ -5,11 +5,13 @@
 //   - 세션의 CharacterId(퀴즈 시작 때 적음)와 Streak(연속 정답 수)로 배율을 정한다.
 //   - Result.Score 는 배율 적용 뒤 점수. Result 에 BaseScore / Multiplier / Bonus / SkillId / SkillTriggered / Streak 추가.
 //   - 세션에 Streak 와 SkillBonus(이 판 스킬로 더 받은 점수 합)를 저장 → 끝나면 QuizResults 에도 남는다.
+//   2026-11-09: 채점마다 PlayerQuestionStats 에 문제별 푼 횟수·맞힌 횟수를 더한다 (questionStats.ts, 빌드·배포는 *-question-stats.mjs)
 // ========================================
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { gradeUserAnswer, processQuizStep } from 'quiz-utils/gradingManager';
 import { getActiveSession, updateSession, finalizeQuizResult } from 'quiz-utils/sessionManager';
 import { applySkill } from './characterSkills';
+import { recordAnswer } from './questionStats';
 import type { ActiveSession } from 'quiz-utils/sessionManager';
 
 // 캐릭터 스킬로 세션에 더한 필드
@@ -98,6 +100,13 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} ` +
         `skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}`
     );
+
+    // 문제별 정답률 (2026-11-09, 커리어 "정답률" 탭): 답할 때마다 푼 횟수·맞힌 횟수를 센다. 실패해도 채점은 계속
+    try {
+      await recordAnswer(playerID, String(currentQuestionID), !!gradingResult.bIsCorrect);
+    } catch (e) {
+      console.error('[ProcessQuestionAnswer] question stats update failed:', e);
+    }
 
     const processResult = await processQuizStep(scoredResult, playerID);
     const updatedSession = processResult.Session;
