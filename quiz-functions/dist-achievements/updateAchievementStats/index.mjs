@@ -4,6 +4,23 @@ import { unmarshall as unmarshall2 } from "@aws-sdk/util-dynamodb";
 // achievementStats.ts
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
+
+// achievementCatalog.ts
+var TABLE_QUIZ_IDS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+
+// reality.ts
+var MASTERY_AVG_SEC = 3;
+var MASTERY_MIN_QUESTIONS = 19;
+function isMastery(q) {
+  if (!q.QuizID || !TABLE_QUIZ_IDS.has(String(q.QuizID))) return false;
+  if (q.WrongCount !== 0) return false;
+  const n = Number(q.QuestionCount) || 0;
+  const t = Number(q.ElapsedTime) || 0;
+  if (n < MASTERY_MIN_QUESTIONS || t <= 0) return false;
+  return t / n <= MASTERY_AVG_SEC;
+}
+
+// achievementStats.ts
 var STATS_TABLE = "PlayerStats";
 var client = new DynamoDBClient({ region: process.env.REGION || process.env.AWS_REGION });
 async function addFinishedQuiz(q) {
@@ -25,6 +42,7 @@ async function addFinishedQuiz(q) {
     values[":char"] = /* @__PURE__ */ new Set([q.CharacterId]);
   }
   if (q.WrongCount === 0) adds.push("PerfectQuizzes :one");
+  if (q.QuizID && isMastery(q)) adds.push("MasteredQuizIds :quiz");
   if (q.LuckyHits && q.LuckyHits > 0) {
     adds.push("LuckyHits :lucky");
     values[":lucky"] = q.LuckyHits;

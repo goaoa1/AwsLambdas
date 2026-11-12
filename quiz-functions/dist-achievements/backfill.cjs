@@ -30635,6 +30635,23 @@ var import_util_dynamodb2 = __toESM(require_dist_cjs61(), 1);
 // achievementStats.ts
 var import_client_dynamodb = __toESM(require_dist_cjs60(), 1);
 var import_util_dynamodb = __toESM(require_dist_cjs61(), 1);
+
+// achievementCatalog.ts
+var TABLE_QUIZ_IDS = /* @__PURE__ */ new Set(["1", "2", "3", "4", "5", "6", "7", "8", "9"]);
+
+// reality.ts
+var MASTERY_AVG_SEC = 3;
+var MASTERY_MIN_QUESTIONS = 19;
+function isMastery(q2) {
+  if (!q2.QuizID || !TABLE_QUIZ_IDS.has(String(q2.QuizID))) return false;
+  if (q2.WrongCount !== 0) return false;
+  const n2 = Number(q2.QuestionCount) || 0;
+  const t = Number(q2.ElapsedTime) || 0;
+  if (n2 < MASTERY_MIN_QUESTIONS || t <= 0) return false;
+  return t / n2 <= MASTERY_AVG_SEC;
+}
+
+// achievementStats.ts
 var STATS_TABLE = "PlayerStats";
 var client = new import_client_dynamodb.DynamoDBClient({ region: process.env.REGION || process.env.AWS_REGION });
 async function addFinishedQuiz(q2) {
@@ -30656,6 +30673,7 @@ async function addFinishedQuiz(q2) {
     values[":char"] = /* @__PURE__ */ new Set([q2.CharacterId]);
   }
   if (q2.WrongCount === 0) adds.push("PerfectQuizzes :one");
+  if (q2.QuizID && isMastery(q2)) adds.push("MasteredQuizIds :quiz");
   if (q2.LuckyHits && q2.LuckyHits > 0) {
     adds.push("LuckyHits :lucky");
     values[":lucky"] = q2.LuckyHits;

@@ -25,6 +25,8 @@ export interface StoryCharState {
 export type StoryMap = Record<string, StoryCharState>;
 
 export const CHARACTER_IDS = new Set(['Char_001', 'Char_002', 'Char_003']);
+/** update-story 가 받는 키: 세 캐릭터 + 'Reality'(현실 연결: 본 번외 seen_extra11 … 를 Flags 로, 2026-11-12) */
+export const STORY_KEYS = new Set([...CHARACTER_IDS, 'Reality']);
 
 export function emptyCharState(): StoryCharState {
   return { Affinity: 0, Seen: [], Events: [], Flags: [], Unlocked: [], Claimed: [], Choices: {}, LastEpisodeDate: '', TapDate: '', TapPointsToday: 0, UpdatedAt: '' };

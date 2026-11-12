@@ -7,7 +7,7 @@
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { createErrorResponse, createSuccessResponse } from 'quiz-utils/idempotencyUtils';
 import { getUserId, parseBody } from './friendStore';
-import { CHARACTER_IDS, emptyCharState, mergeCharState, readStory, writeCharState, type StoryCharState } from './storyStore';
+import { STORY_KEYS, emptyCharState, mergeCharState, readStory, writeCharState, type StoryCharState } from './storyStore';
 
 const MAX_LIST = 200;
 const cleanList = (v: unknown): string[] | undefined =>
@@ -18,7 +18,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
   if (!me) return createErrorResponse(401, 'Unauthorized');
   const body = parseBody<Record<string, unknown>>(event.body);
   const characterId = typeof body?.CharacterId === 'string' ? body.CharacterId : '';
-  if (!body || !CHARACTER_IDS.has(characterId)) return createErrorResponse(400, 'Unknown character', { Reason: 'UnknownCharacter' });
+  if (!body || !STORY_KEYS.has(characterId)) return createErrorResponse(400, 'Unknown character', { Reason: 'UnknownCharacter' });
 
   const patch: Partial<StoryCharState> = {};
   if (body.Affinity !== undefined) patch.Affinity = Math.min(100000, Math.max(0, Math.floor(Number(body.Affinity) || 0)));

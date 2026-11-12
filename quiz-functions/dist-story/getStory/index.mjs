@@ -35,6 +35,8 @@ import { DynamoDBClient as DynamoDBClient3, GetItemCommand as GetItemCommand4, U
 import { marshall as marshall4, unmarshall as unmarshall4 } from "@aws-sdk/util-dynamodb";
 var PLAYER_TABLE = "PlayerResources";
 var client2 = new DynamoDBClient3({ region: process.env.REGION || process.env.AWS_REGION });
+var CHARACTER_IDS = /* @__PURE__ */ new Set(["Char_001", "Char_002", "Char_003"]);
+var STORY_KEYS = /* @__PURE__ */ new Set([...CHARACTER_IDS, "Reality"]);
 var strList = (v) => {
   if (Array.isArray(v)) return v.map(String);
   if (v instanceof Set) return [...v].map(String);

@@ -234,6 +234,14 @@ import { marshall as marshall4, unmarshall as unmarshall4 } from "@aws-sdk/util-
 // achievementStats.ts
 import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand3, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall as marshall3, unmarshall as unmarshall3 } from "@aws-sdk/util-dynamodb";
+
+// reality.ts
+function masteredTables(ids) {
+  if (!ids) return [];
+  return [...ids].map(String).filter((id) => TABLE_QUIZ_IDS.has(id)).map((id) => 10 + Number(id)).sort((a, b) => a - b);
+}
+
+// achievementStats.ts
 var STATS_TABLE = "PlayerStats";
 var client = new DynamoDBClient2({ region: process.env.REGION || process.env.AWS_REGION });
 async function readStats(playerId) {
@@ -273,7 +281,7 @@ var ITEM_NAME = (id) => findItem(id)?.Name ?? id;
 var ACHIEVEMENT_TABLE = "PlayerAchievements";
 var PLAYER_TABLE = "PlayerResources";
 var client2 = new DynamoDBClient3({ region: process.env.REGION || process.env.AWS_REGION });
-async function computeStats(playerId) {
+async function computeStats(playerId, extra) {
   const [stats, player, friendRows] = await Promise.all([
     readStats(playerId),
     client2.send(
@@ -286,6 +294,7 @@ async function computeStats(playerId) {
     listRows(playerId).catch(() => [])
   ]);
   const p = player.Item ? unmarshall4(player.Item) : {};
+  if (extra) extra.mastered = masteredTables(stats.MasteredQuizIds);
   const streakNow = Number(p.AttendanceStreak) || 0;
   const streakBest = Math.max(streakNow, Number(stats.AttendanceStreakBest) || 0);
   if (streakNow > (Number(stats.AttendanceStreakBest) || 0)) {
@@ -359,7 +368,8 @@ function toClientAchievement(a, progress, claimed) {
   };
 }
 async function buildAchievementList(playerId) {
-  const [stats, claimed] = await Promise.all([computeStats(playerId), readClaimed(playerId)]);
+  const extra = {};
+  const [stats, claimed] = await Promise.all([computeStats(playerId, extra), readClaimed(playerId)]);
   const list = ACHIEVEMENTS.map((a) => toClientAchievement(a, stats[a.Stat], claimed.get(a.Id) ?? 0));
   const titles = [];
   for (const a of ACHIEVEMENTS) {
@@ -370,7 +380,8 @@ async function buildAchievementList(playerId) {
     Achievements: list,
     ClaimableCount: list.filter((x) => x.Claimable).length,
     Titles: titles.map((id) => ({ Id: id, Name: TITLES[id] ?? id })),
-    Stats: stats
+    Stats: stats,
+    Mastered: extra.mastered ?? []
   };
 }
 

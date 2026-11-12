@@ -5,9 +5,11 @@
 //     ClearedQuizIds, CharactersPlayed (SS, 집합)
 //     BestAvgSeconds (N, 작을수록 좋음), AttendanceStreakBest (N, 지금까지 가장 긴 연속 출석)
 //     LastResultTs (N) - 마지막으로 반영한 QuizResults.Timestamp. 스트림이 같은 기록을 다시 보내도 두 번 세지 않게.
+//     MasteredQuizIds (SS) - 숙련한 단의 퀴즈 ID (현실 연결 2026-11-12, reality.ts: 틀림 0 + 평균 3초 이하)
 // ========================================
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { isMastery } from './reality';
 
 export const STATS_TABLE = 'PlayerStats';
 const client = new DynamoDBClient({ region: process.env.REGION || process.env.AWS_REGION });
@@ -22,6 +24,7 @@ export interface PlayerStats {
   GiftsSent?: number;
   ClearedQuizIds?: Set<string>;
   CharactersPlayed?: Set<string>;
+  MasteredQuizIds?: Set<string>;
   BestAvgSeconds?: number;
   AttendanceStreakBest?: number;
   LastResultTs?: number;
@@ -57,6 +60,7 @@ export async function addFinishedQuiz(q: FinishedQuiz): Promise<boolean> {
   if (q.QuizID) { adds.push('ClearedQuizIds :quiz'); values[':quiz'] = new Set([String(q.QuizID)]); }
   if (q.CharacterId) { adds.push('CharactersPlayed :char'); values[':char'] = new Set([q.CharacterId]); }
   if (q.WrongCount === 0) adds.push('PerfectQuizzes :one');
+  if (q.QuizID && isMastery(q)) adds.push('MasteredQuizIds :quiz');
   if (q.LuckyHits && q.LuckyHits > 0) { adds.push('LuckyHits :lucky'); values[':lucky'] = q.LuckyHits; }
   if (q.FocusMaxHit) adds.push('FocusMaxQuizzes :one');
 
