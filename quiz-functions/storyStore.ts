@@ -24,7 +24,7 @@ export interface StoryCharState {
 }
 export type StoryMap = Record<string, StoryCharState>;
 
-export const CHARACTER_IDS = new Set(['Char_001', 'Char_002', 'Char_003']);
+export const CHARACTER_IDS = new Set(['Char_001', 'Char_002', 'Char_003', 'Char_004']);   // Char_004 = 페니 (2026-11-16, 페니 이야기 1단계)
 /** update-story 가 받는 키: 세 캐릭터 + 'Reality'(현실 연결: 본 번외 seen_extra11 … 를 Flags 로, 2026-11-12) */
 export const STORY_KEYS = new Set([...CHARACTER_IDS, 'Reality']);
 

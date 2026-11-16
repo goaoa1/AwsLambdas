@@ -32,7 +32,7 @@ import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand3, U
 import { marshall as marshall3, unmarshall as unmarshall3 } from "@aws-sdk/util-dynamodb";
 var PLAYER_TABLE = "PlayerResources";
 var client = new DynamoDBClient2({ region: process.env.REGION || process.env.AWS_REGION });
-var CHARACTER_IDS = /* @__PURE__ */ new Set(["Char_001", "Char_002", "Char_003"]);
+var CHARACTER_IDS = /* @__PURE__ */ new Set(["Char_001", "Char_002", "Char_003", "Char_004"]);
 var STORY_KEYS = /* @__PURE__ */ new Set([...CHARACTER_IDS, "Reality"]);
 function emptyCharState() {
   return { Affinity: 0, Seen: [], Events: [], Flags: [], Unlocked: [], Claimed: [], Choices: {}, LastEpisodeDate: "", TapDate: "", TapPointsToday: 0, UpdatedAt: "" };

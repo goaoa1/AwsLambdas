@@ -30,6 +30,8 @@ function isStoryLocked(outfit, hasUnlock2) {
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
 import { marshall, unmarshall } from "@aws-sdk/util-dynamodb";
 var client = new DynamoDBClient({ region: process.env.REGION || process.env.AWS_REGION });
+var CHARACTER_IDS = /* @__PURE__ */ new Set(["Char_001", "Char_002", "Char_003", "Char_004"]);
+var STORY_KEYS = /* @__PURE__ */ new Set([...CHARACTER_IDS, "Reality"]);
 var strList = (v) => {
   if (Array.isArray(v)) return v.map(String);
   if (v instanceof Set) return [...v].map(String);
