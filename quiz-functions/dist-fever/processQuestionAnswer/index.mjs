@@ -65,6 +65,10 @@ var FEVER_MULTIPLIER = 2;
 var PERFECT_MS = 3e3;
 var PERFECT_MIN_MS = 400;
 var PERFECT_MULTIPLIER = 1.2;
+var SLOW_MS = 1e4;
+function isSlow(answerMs) {
+  return typeof answerMs === "number" && Number.isFinite(answerMs) && answerMs > SLOW_MS;
+}
 function isPerfect(answerMs) {
   return typeof answerMs === "number" && Number.isFinite(answerMs) && answerMs >= PERFECT_MIN_MS && answerMs <= PERFECT_MS;
 }
@@ -75,12 +79,27 @@ function applyFever(isCorrect, skillRaw, skillScore, answerMs, state) {
   if (!isCorrect) {
     return {
       Perfect: false,
+      Slow: false,
       FeverActive: inFever,
       FeverStarted: false,
       FeverEnded: inFever,
       FeverGauge: inFever ? 0 : Math.max(0, gauge - GAUGE_WRONG),
       FeverLeft: 0,
       Score: 0,
+      PerfectBonus: 0,
+      FeverBonus: 0
+    };
+  }
+  if (isSlow(answerMs)) {
+    return {
+      Perfect: false,
+      Slow: true,
+      FeverActive: false,
+      FeverStarted: false,
+      FeverEnded: inFever,
+      FeverGauge: inFever ? 0 : gauge,
+      FeverLeft: 0,
+      Score: skillScore,
       PerfectBonus: 0,
       FeverBonus: 0
     };
@@ -107,6 +126,7 @@ function applyFever(isCorrect, skillRaw, skillScore, answerMs, state) {
   }
   return {
     Perfect: perfect,
+    Slow: false,
     FeverActive: inFever,
     FeverStarted: started,
     FeverEnded: ended,
@@ -206,6 +226,7 @@ var handler = async (event) => {
       ...fever ? {
         Combo: skill.Streak,
         Perfect: fever.Perfect,
+        Slow: fever.Slow,
         FeverActive: fever.FeverActive,
         FeverStarted: fever.FeverStarted,
         FeverEnded: fever.FeverEnded,
@@ -231,7 +252,7 @@ var handler = async (event) => {
       } : {}
     });
     console.log(
-      `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` + (fever ? ` fever(ms=${answerMs} perfect=${fever.Perfect} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})` : "")
+      `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` + (fever ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})` : "")
     );
     try {
       await recordAnswer(playerID, String(currentQuestionID), !!gradingResult.bIsCorrect);

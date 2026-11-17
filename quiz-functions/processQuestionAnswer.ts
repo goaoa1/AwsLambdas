@@ -9,6 +9,7 @@
 //   2026-11-16: 콤보 · 피버 · PERFECT (fever.ts). 요청에 Fever: true(새 기기)일 때만 — AnswerMs(문제가 나온 뒤 답까지 기기에서 잰 ms)로 PERFECT.
 //     Result 에 Perfect / FeverActive / FeverStarted / FeverEnded / FeverGauge / FeverLeft / PerfectBonus / FeverBonus / Combo 추가,
 //     세션에 FeverGauge · FeverLeft · PerfectCount · FeverCount · FeverBonus · MaxCombo. 빌드·배포는 deploy-fever.mjs
+//     2026-11-16: 느린 정답(10초 넘음) 규칙 — Result.Slow (fever.ts)
 // ========================================
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { gradeUserAnswer, processQuizStep } from 'quiz-utils/gradingManager';
@@ -106,6 +107,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ? {
             Combo: skill.Streak,
             Perfect: fever.Perfect,
+            Slow: fever.Slow,
             FeverActive: fever.FeverActive,
             FeverStarted: fever.FeverStarted,
             FeverEnded: fever.FeverEnded,
@@ -138,7 +140,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} ` +
         `skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` +
         (fever
-          ? ` fever(ms=${answerMs} perfect=${fever.Perfect} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})`
+          ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})`
           : '')
     );
 

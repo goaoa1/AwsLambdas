@@ -8,6 +8,8 @@
 //   - PERFECT: 문제가 나온 뒤 3초 안에 맞힘 (기기에서 잰 AnswerMs, 0.4초 아래는 믿지 않음) → 점수 ×1.2, 게이지 +30.
 //   - 점수 = round(기본 × 스킬 배율 × PERFECT 1.2 × 피버 2). 오답은 0점.
 //   - 요청에 Fever: true 를 보내는 새 기기만. 옛 기기(폰 빌드 25 까지)는 예전 점수 그대로.
+//   - 느린 정답 (2026-11-16, 사용자: 콤보 시간 규칙 "Add a soft time rule"): 문제가 나온 뒤 10초가 넘은 정답은
+//     콤보는 이어지지만 게이지 +0. 피버 중이면 그 답은 ×2 없이 피버가 끝남. 오답 규칙은 그대로.
 // ========================================
 
 export const FEVER_GAUGE_MAX = 100;
@@ -19,6 +21,7 @@ export const FEVER_MULTIPLIER = 2;
 export const PERFECT_MS = 3000;
 export const PERFECT_MIN_MS = 400;
 export const PERFECT_MULTIPLIER = 1.2;
+export const SLOW_MS = 10000;
 
 export interface FeverState {
   FeverGauge: number; // 0 ~ 100 (이번 답 전)
@@ -27,6 +30,7 @@ export interface FeverState {
 
 export interface FeverOutcome {
   Perfect: boolean;      // 이번 답이 PERFECT
+  Slow: boolean;         // 이번 답이 느린 정답 (10초 넘음) — 게이지 +0, 피버 중이면 피버 끝
   FeverActive: boolean;  // 이번 답이 피버 중에 채점됨 (×2)
   FeverStarted: boolean; // 이번 답으로 게이지가 차서 다음 문제부터 피버
   FeverEnded: boolean;   // 이번 답으로 피버가 끝남 (다 쓰거나 오답)
@@ -35,6 +39,10 @@ export interface FeverOutcome {
   Score: number;         // 최종 점수 (정수)
   PerfectBonus: number;  // PERFECT 로 더 받은 점수
   FeverBonus: number;    // 피버로 더 받은 점수
+}
+
+export function isSlow(answerMs: number | undefined): boolean {
+  return typeof answerMs === 'number' && Number.isFinite(answerMs) && answerMs > SLOW_MS;
 }
 
 export function isPerfect(answerMs: number | undefined): boolean {
@@ -58,9 +66,18 @@ export function applyFever(
 
   if (!isCorrect) {
     return {
-      Perfect: false, FeverActive: inFever, FeverStarted: false, FeverEnded: inFever,
+      Perfect: false, Slow: false, FeverActive: inFever, FeverStarted: false, FeverEnded: inFever,
       FeverGauge: inFever ? 0 : Math.max(0, gauge - GAUGE_WRONG), FeverLeft: 0,
       Score: 0, PerfectBonus: 0, FeverBonus: 0,
+    };
+  }
+
+  // 느린 정답: 콤보는 이어지지만(스킬 연속 정답은 그대로) 게이지 +0, 피버 중이면 ×2 없이 피버가 끝남
+  if (isSlow(answerMs)) {
+    return {
+      Perfect: false, Slow: true, FeverActive: false, FeverStarted: false, FeverEnded: inFever,
+      FeverGauge: inFever ? 0 : gauge, FeverLeft: 0,
+      Score: skillScore, PerfectBonus: 0, FeverBonus: 0,
     };
   }
 
@@ -86,7 +103,7 @@ export function applyFever(
     }
   }
   return {
-    Perfect: perfect, FeverActive: inFever, FeverStarted: started, FeverEnded: ended,
+    Perfect: perfect, Slow: false, FeverActive: inFever, FeverStarted: started, FeverEnded: ended,
     FeverGauge: gauge, FeverLeft: left, Score: score, PerfectBonus: perfectBonus, FeverBonus: feverBonus,
   };
 }
