@@ -10,12 +10,14 @@
 //     Result 에 Perfect / FeverActive / FeverStarted / FeverEnded / FeverGauge / FeverLeft / PerfectBonus / FeverBonus / Combo 추가,
 //     세션에 FeverGauge · FeverLeft · PerfectCount · FeverCount · FeverBonus · MaxCombo. 빌드·배포는 deploy-fever.mjs
 //     2026-11-16: 느린 정답(10초 넘음) 규칙 — Result.Slow (fever.ts)
+//   2026-11-17: 피버 v2 — 요청 Fever: 2 면 시간 피버(applyFeverV2: 15초, 문제 푸는 동안만 닳음, 피버 중 정답은 게이지를 안 씀).
+//     Result · 세션에 FeverMsLeft. Fever: true(폰 빌드 27 까지)는 5문제 피버 그대로.
 // ========================================
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { gradeUserAnswer, processQuizStep } from 'quiz-utils/gradingManager';
 import { getActiveSession, updateSession, finalizeQuizResult } from 'quiz-utils/sessionManager';
 import { applySkill } from './characterSkills';
-import { applyFever } from './fever';
+import { applyFever, applyFeverV2 } from './fever';
 import { recordAnswer } from './questionStats';
 import type { ActiveSession } from 'quiz-utils/sessionManager';
 
@@ -26,6 +28,8 @@ type SkillSession = ActiveSession & {
   WrongCount?: number; LuckyHits?: number; FocusMaxHit?: boolean;
   // 콤보 · 피버 (2026-11-16)
   FeverGauge?: number; FeverLeft?: number; PerfectCount?: number; FeverCount?: number; FeverBonus?: number; MaxCombo?: number;
+  // 피버 v2 (2026-11-17): 남은 피버 ms
+  FeverMsLeft?: number;
 };
 
 const json = (statusCode: number, body: unknown): APIGatewayProxyResult => ({
@@ -49,7 +53,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     }
     const body = JSON.parse(event.body);
     const userAnswer = body.PlayerAnswer;
-    const feverOn = body.Fever === true;
+    // 피버: 2 = 시간 피버(v2, 2026-11-17), true = 5문제 피버(v1), 없으면 예전 점수
+    const feverMode = body.Fever === 2 ? 2 : body.Fever === true ? 1 : 0;
     const answerMs = typeof body.AnswerMs === 'number' ? body.AnswerMs : undefined;
     if (userAnswer === undefined || userAnswer === null) {
       return { statusCode: 400, body: JSON.stringify({ Message: 'Answer is required' }) };
@@ -88,12 +93,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Streak: session.Streak ?? 0,
     });
     // 콤보 · 피버 · PERFECT (새 기기만)
-    const fever = feverOn
+    const fever = feverMode === 2
+      ? applyFeverV2(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
+          FeverGauge: session.FeverGauge ?? 0,
+          FeverMsLeft: session.FeverMsLeft ?? 0,
+        })
+      : feverMode === 1
       ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
           FeverGauge: session.FeverGauge ?? 0,
           FeverLeft: session.FeverLeft ?? 0,
         })
       : null;
+    const feverMsLeft = fever && 'FeverMsLeft' in fever ? fever.FeverMsLeft : undefined;
     const scoredResult = {
       ...gradingResult,
       Score: fever && gradingResult.bIsCorrect ? fever.Score : skill.Score,
@@ -115,6 +126,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             FeverLeft: fever.FeverLeft,
             PerfectBonus: fever.PerfectBonus,
             FeverBonus: fever.FeverBonus,
+            ...(feverMsLeft !== undefined ? { FeverMsLeft: feverMsLeft } : {}),
           }
         : {}),
     };
@@ -129,6 +141,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         ? {
             FeverGauge: fever.FeverGauge,
             FeverLeft: fever.FeverLeft,
+            ...(feverMsLeft !== undefined ? { FeverMsLeft: feverMsLeft } : {}),
             PerfectCount: (session.PerfectCount ?? 0) + (fever.Perfect ? 1 : 0),
             FeverCount: (session.FeverCount ?? 0) + (fever.FeverStarted ? 1 : 0),
             FeverBonus: (session.FeverBonus ?? 0) + fever.FeverBonus + fever.PerfectBonus,
@@ -140,7 +153,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} ` +
         `skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` +
         (fever
-          ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})`
+          ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft}${feverMsLeft !== undefined ? ` msLeft=${feverMsLeft}` : ''} score=${fever.Score})`
           : '')
     );
 

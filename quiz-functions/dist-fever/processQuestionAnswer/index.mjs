@@ -137,6 +137,88 @@ function applyFever(isCorrect, skillRaw, skillScore, answerMs, state) {
     FeverBonus: feverBonus
   };
 }
+var FEVER_MS = 15e3;
+var FEVER_MIN_TICK_MS = PERFECT_MIN_MS;
+function applyFeverV2(isCorrect, skillRaw, skillScore, answerMs, state) {
+  let gauge = Math.min(FEVER_GAUGE_MAX, Math.max(0, Number(state.FeverGauge) || 0));
+  const msLeft = Math.max(0, Math.floor(Number(state.FeverMsLeft) || 0));
+  const inFever = msLeft > 0;
+  const used = typeof answerMs === "number" && Number.isFinite(answerMs) ? Math.max(FEVER_MIN_TICK_MS, answerMs) : FEVER_MS;
+  const inTime = inFever && used <= msLeft;
+  if (!isCorrect) {
+    return {
+      Perfect: false,
+      Slow: false,
+      FeverActive: inFever,
+      FeverStarted: false,
+      FeverEnded: inFever,
+      FeverGauge: inFever ? 0 : Math.max(0, gauge - GAUGE_WRONG),
+      FeverLeft: 0,
+      FeverMsLeft: 0,
+      Score: 0,
+      PerfectBonus: 0,
+      FeverBonus: 0
+    };
+  }
+  if (inFever) {
+    const perfect2 = isPerfect(answerMs);
+    const afterPerfect = skillRaw * (perfect2 ? PERFECT_MULTIPLIER : 1);
+    const score2 = Math.round(afterPerfect * (inTime ? FEVER_MULTIPLIER : 1));
+    const left = inTime ? msLeft - used : 0;
+    const ended = left <= 0;
+    return {
+      Perfect: perfect2,
+      Slow: false,
+      FeverActive: inTime,
+      FeverStarted: false,
+      FeverEnded: ended,
+      FeverGauge: 0,
+      FeverLeft: ended ? 0 : 1,
+      FeverMsLeft: Math.max(0, left),
+      Score: score2,
+      PerfectBonus: Math.round(afterPerfect) - skillScore,
+      FeverBonus: score2 - Math.round(afterPerfect)
+    };
+  }
+  if (isSlow(answerMs)) {
+    return {
+      Perfect: false,
+      Slow: true,
+      FeverActive: false,
+      FeverStarted: false,
+      FeverEnded: false,
+      FeverGauge: gauge,
+      FeverLeft: 0,
+      FeverMsLeft: 0,
+      Score: skillScore,
+      PerfectBonus: 0,
+      FeverBonus: 0
+    };
+  }
+  const perfect = isPerfect(answerMs);
+  const score = Math.round(skillRaw * (perfect ? PERFECT_MULTIPLIER : 1));
+  gauge += perfect ? GAUGE_PERFECT : GAUGE_CORRECT;
+  let started = false;
+  let ms = 0;
+  if (gauge >= FEVER_GAUGE_MAX) {
+    gauge = 0;
+    ms = FEVER_MS;
+    started = true;
+  }
+  return {
+    Perfect: perfect,
+    Slow: false,
+    FeverActive: false,
+    FeverStarted: started,
+    FeverEnded: false,
+    FeverGauge: gauge,
+    FeverLeft: started ? 1 : 0,
+    FeverMsLeft: ms,
+    Score: score,
+    PerfectBonus: score - skillScore,
+    FeverBonus: 0
+  };
+}
 
 // questionStats.ts
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from "@aws-sdk/client-dynamodb";
@@ -179,7 +261,7 @@ var handler = async (event) => {
     }
     const body = JSON.parse(event.body);
     const userAnswer = body.PlayerAnswer;
-    const feverOn = body.Fever === true;
+    const feverMode = body.Fever === 2 ? 2 : body.Fever === true ? 1 : 0;
     const answerMs = typeof body.AnswerMs === "number" ? body.AnswerMs : void 0;
     if (userAnswer === void 0 || userAnswer === null) {
       return { statusCode: 400, body: JSON.stringify({ Message: "Answer is required" }) };
@@ -210,10 +292,14 @@ var handler = async (event) => {
     const skill = applySkill(session.CharacterId, gradingResult.bIsCorrect, gradingResult.Score, {
       Streak: session.Streak ?? 0
     });
-    const fever = feverOn ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
+    const fever = feverMode === 2 ? applyFeverV2(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
+      FeverGauge: session.FeverGauge ?? 0,
+      FeverMsLeft: session.FeverMsLeft ?? 0
+    }) : feverMode === 1 ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
       FeverGauge: session.FeverGauge ?? 0,
       FeverLeft: session.FeverLeft ?? 0
     }) : null;
+    const feverMsLeft = fever && "FeverMsLeft" in fever ? fever.FeverMsLeft : void 0;
     const scoredResult = {
       ...gradingResult,
       Score: fever && gradingResult.bIsCorrect ? fever.Score : skill.Score,
@@ -233,7 +319,8 @@ var handler = async (event) => {
         FeverGauge: fever.FeverGauge,
         FeverLeft: fever.FeverLeft,
         PerfectBonus: fever.PerfectBonus,
-        FeverBonus: fever.FeverBonus
+        FeverBonus: fever.FeverBonus,
+        ...feverMsLeft !== void 0 ? { FeverMsLeft: feverMsLeft } : {}
       } : {}
     };
     await updateSession(playerID, {
@@ -245,6 +332,7 @@ var handler = async (event) => {
       ...fever ? {
         FeverGauge: fever.FeverGauge,
         FeverLeft: fever.FeverLeft,
+        ...feverMsLeft !== void 0 ? { FeverMsLeft: feverMsLeft } : {},
         PerfectCount: (session.PerfectCount ?? 0) + (fever.Perfect ? 1 : 0),
         FeverCount: (session.FeverCount ?? 0) + (fever.FeverStarted ? 1 : 0),
         FeverBonus: (session.FeverBonus ?? 0) + fever.FeverBonus + fever.PerfectBonus,
@@ -252,7 +340,7 @@ var handler = async (event) => {
       } : {}
     });
     console.log(
-      `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` + (fever ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft} score=${fever.Score})` : "")
+      `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` + (fever ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft}${feverMsLeft !== void 0 ? ` msLeft=${feverMsLeft}` : ""} score=${fever.Score})` : "")
     );
     try {
       await recordAnswer(playerID, String(currentQuestionID), !!gradingResult.bIsCorrect);

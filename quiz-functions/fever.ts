@@ -10,6 +10,8 @@
 //   - 요청에 Fever: true 를 보내는 새 기기만. 옛 기기(폰 빌드 25 까지)는 예전 점수 그대로.
 //   - 느린 정답 (2026-11-16, 사용자: 콤보 시간 규칙 "Add a soft time rule"): 문제가 나온 뒤 10초가 넘은 정답은
 //     콤보는 이어지지만 게이지 +0. 피버 중이면 그 답은 ×2 없이 피버가 끝남. 오답 규칙은 그대로.
+//   - 피버 v2 (2026-11-17, 사용자: "피버게이지를 시간에 따라 점점 닳게하자. 피버 중에는 답 맞췄다고 피버 게이지가 줄어드는 스펙은 아웃.")
+//     → 맨 아래 applyFeverV2. 요청에 Fever: 2 를 보내는 기기만(그 전 기기는 Fever: true → 위의 5문제 피버 그대로).
 // ========================================
 
 export const FEVER_GAUGE_MAX = 100;
@@ -105,5 +107,89 @@ export function applyFever(
   return {
     Perfect: perfect, Slow: false, FeverActive: inFever, FeverStarted: started, FeverEnded: ended,
     FeverGauge: gauge, FeverLeft: left, Score: score, PerfectBonus: perfectBonus, FeverBonus: feverBonus,
+  };
+}
+
+// ========================================
+// 피버 v2 — 시간 피버 (2026-11-17, 사용자: "피버게이지를 시간에 따라 점점 닳게하자. 피버 중에는 답 맞췄다고 피버 게이지가 줄어드는 스펙은 아웃.")
+//   요청에 Fever: 2 를 보낼 때만. 게이지 모으기(+20 / PERFECT +30 / 오답 −50 / 느린 정답 +0)는 그대로.
+//   - 게이지가 100 이 되면 피버 시간 FEVER_MS(15초)가 생김. 피버 시간은 문제를 푸는 동안만 닳음 —
+//     답마다 그 답 시간(AnswerMs: 문제가 나온 뒤 답까지 기기에서 잰 ms, 멈춘 시간 뺌, 최소 0.4초)만큼 줄어듦.
+//     문제 사이(채점 · 다음 문제 기다림)는 안 닳음. 게임은 같은 시계로 게이지를 줄여 보여 줌.
+//   - 피버 중 정답은 ×2, 게이지(피버 시간)를 따로 쓰지 않음 — 예전 '정답 하나 = 5문제 중 하나' 는 없앰.
+//   - 이번 답 시간이 남은 피버 시간보다 길면(문제를 푸는 사이 다 닳음) 그 답은 ×2 없이 피버가 끝남.
+//   - 피버 중 오답이면 바로 끝(그대로). 느린 정답 10초 규칙은 피버 밖에서만(피버 안에서는 시간이 대신함).
+//   - 결과 · 세션에 FeverMsLeft(남은 피버 ms). FeverLeft 는 옛 표시와 맞추려고 피버가 이어지면 1, 아니면 0.
+// ========================================
+export const FEVER_MS = 15000;
+export const FEVER_MIN_TICK_MS = PERFECT_MIN_MS;
+
+export interface FeverStateV2 {
+  FeverGauge: number;   // 0 ~ 100 (이번 답 전)
+  FeverMsLeft: number;  // 남은 피버 ms (이번 답 전, 0 = 피버 아님)
+}
+
+export interface FeverOutcomeV2 extends FeverOutcome {
+  FeverMsLeft: number;  // 이번 답 뒤 남은 피버 ms
+}
+
+export function applyFeverV2(
+  isCorrect: boolean,
+  skillRaw: number,
+  skillScore: number,
+  answerMs: number | undefined,
+  state: FeverStateV2
+): FeverOutcomeV2 {
+  let gauge = Math.min(FEVER_GAUGE_MAX, Math.max(0, Number(state.FeverGauge) || 0));
+  const msLeft = Math.max(0, Math.floor(Number(state.FeverMsLeft) || 0));
+  const inFever = msLeft > 0;
+  // 이번 답이 쓴 피버 시간 (AnswerMs 가 없으면 피버를 다 씀)
+  const used = typeof answerMs === 'number' && Number.isFinite(answerMs) ? Math.max(FEVER_MIN_TICK_MS, answerMs) : FEVER_MS;
+  const inTime = inFever && used <= msLeft;
+
+  if (!isCorrect) {
+    return {
+      Perfect: false, Slow: false, FeverActive: inFever, FeverStarted: false, FeverEnded: inFever,
+      FeverGauge: inFever ? 0 : Math.max(0, gauge - GAUGE_WRONG), FeverLeft: 0, FeverMsLeft: 0,
+      Score: 0, PerfectBonus: 0, FeverBonus: 0,
+    };
+  }
+
+  if (inFever) {
+    // 피버 중 정답: 시간 안이면 ×2 + 쓴 시간만큼 줄어듦, 시간을 넘겼으면 ×2 없이 끝
+    const perfect = isPerfect(answerMs);
+    const afterPerfect = skillRaw * (perfect ? PERFECT_MULTIPLIER : 1);
+    const score = Math.round(afterPerfect * (inTime ? FEVER_MULTIPLIER : 1));
+    const left = inTime ? msLeft - used : 0;
+    const ended = left <= 0;
+    return {
+      Perfect: perfect, Slow: false, FeverActive: inTime, FeverStarted: false, FeverEnded: ended,
+      FeverGauge: 0, FeverLeft: ended ? 0 : 1, FeverMsLeft: Math.max(0, left),
+      Score: score, PerfectBonus: Math.round(afterPerfect) - skillScore, FeverBonus: score - Math.round(afterPerfect),
+    };
+  }
+
+  // 피버 밖: 느린 정답은 게이지 +0 (콤보는 이어짐)
+  if (isSlow(answerMs)) {
+    return {
+      Perfect: false, Slow: true, FeverActive: false, FeverStarted: false, FeverEnded: false,
+      FeverGauge: gauge, FeverLeft: 0, FeverMsLeft: 0,
+      Score: skillScore, PerfectBonus: 0, FeverBonus: 0,
+    };
+  }
+  const perfect = isPerfect(answerMs);
+  const score = Math.round(skillRaw * (perfect ? PERFECT_MULTIPLIER : 1));
+  gauge += perfect ? GAUGE_PERFECT : GAUGE_CORRECT;
+  let started = false;
+  let ms = 0;
+  if (gauge >= FEVER_GAUGE_MAX) {
+    gauge = 0;
+    ms = FEVER_MS;
+    started = true;
+  }
+  return {
+    Perfect: perfect, Slow: false, FeverActive: false, FeverStarted: started, FeverEnded: false,
+    FeverGauge: gauge, FeverLeft: started ? 1 : 0, FeverMsLeft: ms,
+    Score: score, PerfectBonus: score - skillScore, FeverBonus: 0,
   };
 }
