@@ -22,6 +22,8 @@ export interface QuizResultLike {
   CreatedAt?: string;
   QuestionCount?: number;
   CurrentQuestionIndex?: number;
+  // 난이도 판의 문제 묶음 ID (211~519, 2026-11-17)
+  QuestionSetID?: string | number;
 }
 
 // 끝까지 푼 결과만 기록으로 친다 (중간에 그만둔 세션은 결과로 저장되지 않지만 방어)
@@ -42,7 +44,14 @@ export function better(a: { Score: number; Time: number }, b: { Score: number; T
 
 // 결과 하나를 기록에 합친다 (Plays 는 늘 1 증가)
 export function mergeResult(records: BestRecords, r: QuizResultLike): BestRecords {
-  const id = String(r.QuizID);
+  // 난이도 판 (2026-11-17, difficulty.ts): 단 기록(QuizID 1~9 — 친구 순위가 읽음)에 더해 난이도별 기록(문제 묶음 ID 211~519)에도 넣음.
+  //   단 기록은 어느 난이도든 그 단의 최고 점수(어려울수록 문제 점수가 커서 자연히 위로)
+  const merged = mergeOne(records, String(r.QuizID), r);
+  const setId = r.QuestionSetID !== undefined && r.QuestionSetID !== null ? String(r.QuestionSetID) : '';
+  return setId && setId !== String(r.QuizID) ? mergeOne(merged, setId, r) : merged;
+}
+
+function mergeOne(records: BestRecords, id: string, r: QuizResultLike): BestRecords {
   const prev = records[id];
   const cand = { Score: Number(r.Score ?? 0), Time: Math.round(Number(r.ElapsedTime ?? 0) * 10) / 10 };
   const plays = (prev?.Plays ?? 0) + 1;

@@ -18,6 +18,7 @@ import { gradeUserAnswer, processQuizStep } from 'quiz-utils/gradingManager';
 import { getActiveSession, updateSession, finalizeQuizResult } from 'quiz-utils/sessionManager';
 import { applySkill } from './characterSkills';
 import { applyFever, applyFeverV2 } from './fever';
+import { timeScale } from './difficulty';
 import { recordAnswer } from './questionStats';
 import type { ActiveSession } from 'quiz-utils/sessionManager';
 
@@ -30,6 +31,8 @@ type SkillSession = ActiveSession & {
   FeverGauge?: number; FeverLeft?: number; PerfectCount?: number; FeverCount?: number; FeverBonus?: number; MaxCombo?: number;
   // 피버 v2 (2026-11-17): 남은 피버 ms
   FeverMsLeft?: number;
+  // 난이도 모드 (2026-11-17, difficulty.ts): 단 퀴즈를 어떤 난이도로 시작했는지 · 그 문제 묶음 ID
+  Difficulty?: string; QuestionSetID?: string;
 };
 
 const json = (statusCode: number, body: unknown): APIGatewayProxyResult => ({
@@ -93,13 +96,16 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Streak: session.Streak ?? 0,
     });
     // 콤보 · 피버 · PERFECT (새 기기만)
+    // 난이도 모드: 어려울수록 답 시간을 나눠 봄 (어려움 ×2, 매우 어려움 ×3) — PERFECT · 느림 · 피버 시간이 같은 규칙 그대로
+    const scale = timeScale(session.Difficulty);
+    const feverMs = answerMs !== undefined ? Math.round(answerMs / scale) : undefined;
     const fever = feverMode === 2
-      ? applyFeverV2(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
+      ? applyFeverV2(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, feverMs, {
           FeverGauge: session.FeverGauge ?? 0,
           FeverMsLeft: session.FeverMsLeft ?? 0,
         })
       : feverMode === 1
-      ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, answerMs, {
+      ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, feverMs, {
           FeverGauge: session.FeverGauge ?? 0,
           FeverLeft: session.FeverLeft ?? 0,
         })
@@ -153,7 +159,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} ` +
         `skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` +
         (fever
-          ? ` fever(ms=${answerMs} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft}${feverMsLeft !== undefined ? ` msLeft=${feverMsLeft}` : ''} score=${fever.Score})`
+          ? ` fever(ms=${answerMs}${scale !== 1 ? `/${scale}=${feverMs}` : ''} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft}${feverMsLeft !== undefined ? ` msLeft=${feverMsLeft}` : ''} score=${fever.Score})`
           : '')
     );
 
