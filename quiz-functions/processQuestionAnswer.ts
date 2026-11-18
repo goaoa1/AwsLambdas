@@ -20,6 +20,7 @@ import { applySkill } from './characterSkills';
 import { applyFever, applyFeverV2 } from './fever';
 import { timeScale } from './difficulty';
 import { recordAnswer } from './questionStats';
+import { grantQuizMilk } from './quizMilk';
 import type { ActiveSession } from 'quiz-utils/sessionManager';
 
 // 캐릭터 스킬로 세션에 더한 필드
@@ -172,6 +173,18 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
 
     const processResult = await processQuizStep(scoredResult, playerID);
     const updatedSession = processResult.Session;
+    // 판 끝 우유 (quizMilk.ts, 2026-11-18): 끝까지 푼 판마다 바나나우유 1개, 하루 상한까지. 실패해도 판 끝은 그대로 (우유만 빠짐)
+    //   MilkGift 0 + QuizMilkToday >= QuizMilkCap = 오늘 몫을 다 받음 (기기가 '오늘 우유는 다 받았어요')
+    let milk: { MilkGift: number; QuizMilk: number; QuizMilkToday: number; QuizMilkCap: number } | undefined;
+    if (processResult.Status === 'COMPLETED') {
+      try {
+        const g = await grantQuizMilk(playerID);
+        milk = { MilkGift: g.gift, QuizMilk: g.total, QuizMilkToday: g.today, QuizMilkCap: g.cap };
+        console.log(`[ProcessQuestionAnswer] ${playerID} quiz milk +${g.gift} (total ${g.total}, today ${g.today}/${g.cap})`);
+      } catch (e) {
+        console.error('[ProcessQuestionAnswer] quiz milk failed:', e);
+      }
+    }
     return json(200, {
       Success: true,
       Status: processResult.Status,
@@ -179,6 +192,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Session: {
         QuestionCount: updatedSession.QuestionIDs.length,
         ...updatedSession,
+        ...(milk ?? {}),
       },
     });
   } catch (error) {

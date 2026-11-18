@@ -72,7 +72,8 @@ export function normalizeDuel(raw: unknown): DuelState {
     Won: [...new Set(won)],
     History: history,
     Recent: recent,
-    MilkGiven: Math.max(0, Math.min(1000, Math.floor(Number(r.MilkGiven) || 0))),
+    // 판 끝 우유(2026-11-18)로 판마다 하나씩 늘 수 있어 상한을 넉넉히 (예전 1000)
+    MilkGiven: Math.max(0, Math.min(1000000, Math.floor(Number(r.MilkGiven) || 0))),
     UpdatedAt: typeof r.UpdatedAt === 'string' ? r.UpdatedAt : '',
   };
 }
