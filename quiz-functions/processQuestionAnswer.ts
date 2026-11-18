@@ -59,6 +59,8 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const userAnswer = body.PlayerAnswer;
     // 피버: 2 = 시간 피버(v2, 2026-11-17), true = 5문제 피버(v1), 없으면 예전 점수
     const feverMode = body.Fever === 2 ? 2 : body.Fever === true ? 1 : 0;
+    // 피버 밖 게이지도 시간에 따라 닳음 (2026-11-18, fever.ts GAUGE_IDLE_DRAIN_PER_SEC) — GaugeDrain: true 를 보내는 새 기기만
+    const gaugeDrain = feverMode === 2 && body.GaugeDrain === true;
     const answerMs = typeof body.AnswerMs === 'number' ? body.AnswerMs : undefined;
     if (userAnswer === undefined || userAnswer === null) {
       return { statusCode: 400, body: JSON.stringify({ Message: 'Answer is required' }) };
@@ -101,10 +103,14 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     const scale = timeScale(session.Difficulty);
     const feverMs = answerMs !== undefined ? Math.round(answerMs / scale) : undefined;
     const fever = feverMode === 2
-      ? applyFeverV2(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, feverMs, {
-          FeverGauge: session.FeverGauge ?? 0,
-          FeverMsLeft: session.FeverMsLeft ?? 0,
-        })
+      ? applyFeverV2(
+          !!gradingResult.bIsCorrect,
+          skill.BaseScore * skill.Multiplier,
+          skill.Score,
+          feverMs,
+          { FeverGauge: session.FeverGauge ?? 0, FeverMsLeft: session.FeverMsLeft ?? 0 },
+          { idleDrain: gaugeDrain }
+        )
       : feverMode === 1
       ? applyFever(!!gradingResult.bIsCorrect, skill.BaseScore * skill.Multiplier, skill.Score, feverMs, {
           FeverGauge: session.FeverGauge ?? 0,
@@ -112,6 +118,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
         })
       : null;
     const feverMsLeft = fever && 'FeverMsLeft' in fever ? fever.FeverMsLeft : undefined;
+    const gaugeDrained = gaugeDrain && fever && 'GaugeDrained' in fever ? fever.GaugeDrained : undefined;
     const scoredResult = {
       ...gradingResult,
       Score: fever && gradingResult.bIsCorrect ? fever.Score : skill.Score,
@@ -134,6 +141,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             PerfectBonus: fever.PerfectBonus,
             FeverBonus: fever.FeverBonus,
             ...(feverMsLeft !== undefined ? { FeverMsLeft: feverMsLeft } : {}),
+            ...(gaugeDrained !== undefined ? { GaugeDrained: gaugeDrained } : {}),
           }
         : {}),
     };
@@ -160,7 +168,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       `[ProcessQuestionAnswer] ${playerID} q=${currentQuestionID} correct=${gradingResult.bIsCorrect} ` +
         `skill=${skill.SkillId} x${skill.Multiplier} ${skill.BaseScore}->${skill.Score} streak=${skill.Streak}` +
         (fever
-          ? ` fever(ms=${answerMs}${scale !== 1 ? `/${scale}=${feverMs}` : ''} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge} left=${fever.FeverLeft}${feverMsLeft !== undefined ? ` msLeft=${feverMsLeft}` : ''} score=${fever.Score})`
+          ? ` fever(ms=${answerMs}${scale !== 1 ? `/${scale}=${feverMs}` : ''} perfect=${fever.Perfect} slow=${fever.Slow} active=${fever.FeverActive} gauge=${fever.FeverGauge}${gaugeDrained !== undefined ? ` drained=${gaugeDrained}` : ''} left=${fever.FeverLeft}${feverMsLeft !== undefined ? ` msLeft=${feverMsLeft}` : ''} score=${fever.Score})`
           : '')
     );
 

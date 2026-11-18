@@ -131,6 +131,23 @@ export interface FeverStateV2 {
 
 export interface FeverOutcomeV2 extends FeverOutcome {
   FeverMsLeft: number;  // 이번 답 뒤 남은 피버 ms
+  GaugeDrained: number; // 이번 답 동안 피버 밖 게이지가 닳은 양 (닳기를 안 쓰면 0)
+}
+
+// 피버 밖 게이지도 시간에 따라 닳음 (2026-11-18, 사용자: "피버 상태가 아니더라도 피버 게이지 시간에 따라 줄어들게 한다.
+//   줄어드는 속도는 피버 상태일 때보다는 천천히"). 피버 시간처럼 문제를 푸는 동안만(답 시간 AnswerMs, 최소 0.4초) 닳음 —
+//   초당 2 (피버는 게이지 100 을 15초에 = 초당 6.7 → 약 30% 빠르기). 요청에 GaugeDrain: true 를 보내는 새 기기만(옛 기기 · 옛 서버는 그대로).
+//   닳은 뒤에 이번 답을 셈: 정답 +20 / PERFECT +30, 오답 −50, 느린 정답 +0. 결과에 GaugeDrained(이번 답에서 닳은 양).
+//   게임 쪽 같은 숫자: UComboFeverWidget::IdleDrainPerSec.
+export const GAUGE_IDLE_DRAIN_PER_SEC = 2;
+
+export interface FeverOptionsV2 {
+  idleDrain?: boolean;  // 피버 밖 게이지 닳기 (요청 GaugeDrain: true)
+}
+
+export function idleDrainFor(answerMs: number | undefined): number {
+  if (typeof answerMs !== 'number' || !Number.isFinite(answerMs)) return 0;
+  return Math.round((Math.max(FEVER_MIN_TICK_MS, answerMs) / 1000) * GAUGE_IDLE_DRAIN_PER_SEC);
 }
 
 export function applyFeverV2(
@@ -138,7 +155,8 @@ export function applyFeverV2(
   skillRaw: number,
   skillScore: number,
   answerMs: number | undefined,
-  state: FeverStateV2
+  state: FeverStateV2,
+  options: FeverOptionsV2 = {}
 ): FeverOutcomeV2 {
   let gauge = Math.min(FEVER_GAUGE_MAX, Math.max(0, Number(state.FeverGauge) || 0));
   const msLeft = Math.max(0, Math.floor(Number(state.FeverMsLeft) || 0));
@@ -146,12 +164,18 @@ export function applyFeverV2(
   // 이번 답이 쓴 피버 시간 (AnswerMs 가 없으면 피버를 다 씀)
   const used = typeof answerMs === 'number' && Number.isFinite(answerMs) ? Math.max(FEVER_MIN_TICK_MS, answerMs) : FEVER_MS;
   const inTime = inFever && used <= msLeft;
+  // 피버 밖: 이 문제를 푸는 동안 게이지가 먼저 닳음
+  let drained = 0;
+  if (!inFever && options.idleDrain) {
+    drained = Math.min(gauge, idleDrainFor(answerMs));
+    gauge -= drained;
+  }
 
   if (!isCorrect) {
     return {
       Perfect: false, Slow: false, FeverActive: inFever, FeverStarted: false, FeverEnded: inFever,
       FeverGauge: inFever ? 0 : Math.max(0, gauge - GAUGE_WRONG), FeverLeft: 0, FeverMsLeft: 0,
-      Score: 0, PerfectBonus: 0, FeverBonus: 0,
+      Score: 0, PerfectBonus: 0, FeverBonus: 0, GaugeDrained: drained,
     };
   }
 
@@ -166,6 +190,7 @@ export function applyFeverV2(
       Perfect: perfect, Slow: false, FeverActive: inTime, FeverStarted: false, FeverEnded: ended,
       FeverGauge: 0, FeverLeft: ended ? 0 : 1, FeverMsLeft: Math.max(0, left),
       Score: score, PerfectBonus: Math.round(afterPerfect) - skillScore, FeverBonus: score - Math.round(afterPerfect),
+      GaugeDrained: 0,
     };
   }
 
@@ -174,7 +199,7 @@ export function applyFeverV2(
     return {
       Perfect: false, Slow: true, FeverActive: false, FeverStarted: false, FeverEnded: false,
       FeverGauge: gauge, FeverLeft: 0, FeverMsLeft: 0,
-      Score: skillScore, PerfectBonus: 0, FeverBonus: 0,
+      Score: skillScore, PerfectBonus: 0, FeverBonus: 0, GaugeDrained: drained,
     };
   }
   const perfect = isPerfect(answerMs);
@@ -190,6 +215,6 @@ export function applyFeverV2(
   return {
     Perfect: perfect, Slow: false, FeverActive: false, FeverStarted: started, FeverEnded: false,
     FeverGauge: gauge, FeverLeft: started ? 1 : 0, FeverMsLeft: ms,
-    Score: score, PerfectBonus: score - skillScore, FeverBonus: 0,
+    Score: score, PerfectBonus: score - skillScore, FeverBonus: 0, GaugeDrained: drained,
   };
 }
