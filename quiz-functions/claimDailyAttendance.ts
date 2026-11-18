@@ -10,6 +10,7 @@ import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/clie
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { ensureItemsMap, grantItemsExpression } from './inventoryStore';
 import { ITEM_NAME } from './itemCatalog';
+import { recentDays, streakDays, toDayList } from './attendanceDays';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -87,10 +88,14 @@ const lambdaHandler = async (
   for (const [k, v] of Object.entries((playerData.Items as Record<string, unknown>) ?? {})) currentItems[k] = Number(v) || 0;
   const bonus = grantItemsExpression(calcBonusItems(newStreak), currentItems, 'b');
 
+  // 출석 달력 (attendanceDays.ts, 2026-11-18): 오늘을 AttendanceDays 집합에 더함. 집합이 아직 없으면 지금까지의 연속 출석 날들도 함께
+  const storedDays = toDayList(playerData.AttendanceDays);
+  const addSet = new Set<string>([...(storedDays ? [] : streakDays(lastAttendanceDate, currentStreak)), todayKST]);
+
   // 4. 원자적 업데이트 (condition으로 경쟁 조건에서도 중복 방지)
   const baseSet = 'SET LastAttendanceDate = :today, AttendanceStreak = :newStreak, TotalAttendanceDays = :newTotal, Stamina = :newStamina, UpdatedAt = :now'
     + (bonus.sets.length ? ', ' + bonus.sets.join(', ') : '');
-  const updateExpression = isFull ? baseSet + ' REMOVE LastStaminaUpdateAt' : baseSet;
+  const updateExpression = (isFull ? baseSet + ' REMOVE LastStaminaUpdateAt' : baseSet) + ' ADD AttendanceDays :days';
 
   try {
     await dynamoDBClient.send(
@@ -108,6 +113,7 @@ const lambdaHandler = async (
           ':newTotal': newTotal,
           ':newStamina': newStamina,
           ':now': now,
+          ':days': addSet,
           ...bonus.values,
         }),
       })
@@ -132,6 +138,9 @@ const lambdaHandler = async (
     UpdatedStamina: newStamina,
     // 보너스 아이템 [{ ItemId, Name, Count }]
     BonusItems: Object.entries(bonus.granted).map(([ItemId, Count]) => ({ ItemId, Name: ITEM_NAME(ItemId), Count })),
+    // 출석 달력: 최근 70일 출석한 날 (오늘 포함) · 서버 기준 오늘
+    AttendanceDays: recentDays([...(storedDays ?? []), ...addSet], todayKST),
+    TodayKST: todayKST,
   });
 };
 

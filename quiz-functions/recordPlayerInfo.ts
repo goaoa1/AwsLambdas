@@ -2,6 +2,7 @@ import type { APIGatewayProxyEvent, APIGatewayProxyResult, Context } from 'aws-l
 import { createErrorResponse, createSuccessResponse } from 'quiz-utils/idempotencyUtils';
 import { DynamoDBClient, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
+import { knownDays, recentDays } from './attendanceDays';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -142,6 +143,9 @@ export const handler = async (
     AttendanceStreak:          attendanceStreak,
     AttendanceTotalDays:       attendanceTotalDays,
     AttendanceNextReward:      nextReward,
+    // 출석 달력 (attendanceDays.ts, 2026-11-18): 최근 70일 출석한 날 (예전 계정은 지금 연속 출석으로 채운 날) · 서버 기준 오늘(KST)
+    AttendanceDays:            recentDays(knownDays(playerData.AttendanceDays, lastAttendanceDate, attendanceStreak), todayKST),
+    TodayKST:                  todayKST,
     UnlockedCharacters:        playerData.UnlockedCharacters ?? [],
     SelectedCharacterId:       playerData.SelectedCharacterId ?? '',
     // 상점: 로그인 직후 메뉴 상단에 크레딧을 보여 주고, 부스가 입힌 의상을 바로 알 수 있게 함께 내려준다
