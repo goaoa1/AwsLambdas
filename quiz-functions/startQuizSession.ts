@@ -10,7 +10,7 @@ import { DynamoDBClient, GetItemCommand, TransactWriteItemsCommand } from '@aws-
 import { marshall } from '@aws-sdk/util-dynamodb';
 import { getShuffledQuestionIDs, type ShuffledQuizData } from 'quiz-utils/quizManager';
 import { skillFor } from './characterSkills';
-import { parseDifficulty, questionSetId } from './difficulty';
+import { parseDifficulty, questionSetId, repeatFor, repeatQuestions } from './difficulty';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
 const PLAYER_TABLE = 'PlayerResources';
@@ -67,7 +67,9 @@ const lambdaHandler = async (
   }
   // QuizSize(매우 어려움 18문제): 레이어 버전과 상관없이 여기서도 자름 (이미 잘렸으면 그대로)
   const quizSize = (quizData as { QuizSize?: unknown }).QuizSize;
-  const questionIds = typeof quizSize === 'number' && quizSize > 0 ? quizData.QuestionIDs.slice(0, quizSize) : quizData.QuestionIDs;
+  const pickedIds = typeof quizSize === 'number' && quizSize > 0 ? quizData.QuestionIDs.slice(0, quizSize) : quizData.QuestionIDs;
+  // 쉬움 · 보통 (9문제 묶음)은 문제마다 두 번 → 18문제 (difficulty.ts REPEAT, 2026-11-19). 묶음을 못 찾아 예전 단 퀴즈로 왔으면 그대로
+  const questionIds = setId !== quizId ? repeatQuestions(pickedIds, repeatFor(difficulty)) : pickedIds;
 
   // 캐릭터 스킬(characterSkills.ts): 퀴즈를 시작할 때 고른 캐릭터를 세션에 적어 둔다.
   // 퀴즈 도중 메뉴에서 캐릭터를 바꿔도 이 판에는 영향이 없다. 읽기에 실패하면 스킬 없이(배율 1) 진행한다.
