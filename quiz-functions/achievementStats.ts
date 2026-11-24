@@ -6,6 +6,7 @@
 //     BestAvgSeconds (N, 작을수록 좋음), AttendanceStreakBest (N, 지금까지 가장 긴 연속 출석)
 //     LastResultTs (N) - 마지막으로 반영한 QuizResults.Timestamp. 스트림이 같은 기록을 다시 보내도 두 번 세지 않게.
 //     MasteredQuizIds (SS) - 숙련한 단의 퀴즈 ID (현실 연결 2026-11-12, reality.ts: 틀림 0 + 평균 3초 이하)
+//     BattleKills, BattleRecites, BossInterrupts, BattleDodges (N, 더하기) - 전투 판 (2026-11-24, finishBattle.ts → addFinishedBattle)
 // ========================================
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
@@ -28,6 +29,10 @@ export interface PlayerStats {
   BestAvgSeconds?: number;
   AttendanceStreakBest?: number;
   LastResultTs?: number;
+  BattleKills?: number;
+  BattleRecites?: number;
+  BossInterrupts?: number;
+  BattleDodges?: number;
 }
 
 export async function readStats(playerId: string): Promise<PlayerStats> {
@@ -83,6 +88,59 @@ export async function addFinishedQuiz(q: FinishedQuiz): Promise<boolean> {
 
   const avg = count > 0 && q.ElapsedTime && q.ElapsedTime > 0 ? Math.round((q.ElapsedTime / count) * 100) / 100 : undefined;
   if (avg != null) await setIfLower(q.PlayerID, 'BestAvgSeconds', avg);
+  return true;
+}
+
+/** 끝난 전투 판 한 판 (2026-11-24 — 사용자: "기존 반영 + 전투 4종"). finishBattle.ts 가 판을 마감한 뒤 한 번만 부른다 */
+export interface FinishedBattle {
+  PlayerID: string;
+  Win: boolean;         // 의뢰 완료 (후퇴면 false)
+  QuizID: string;
+  CharacterId?: string;
+  Corrects: number;     // 서버가 다시 매긴 맞힌 수
+  Wrong: number;        // 서버가 다시 매긴 틀린 수
+  Kills: number;
+  Recites: number;      // 암송 (식이 뜬 뒤 3초 안에 맞힘)
+  Interrupts: number;   // 보스의 두루마리 읽기를 끊은 수
+  Dodged: number;       // 큰 공격을 피한 수
+}
+
+/** PlayerStats 에 더할 것 (ADD 식 · 값, 없으면 null).
+ *  기존 도전과제: 의뢰 완료 = 퀴즈 완주 · 단 정복 · 모두와 함께, 틀린 식 없이 의뢰 완료 = 완벽한 퀴즈, 맞힌 수 = 누적 정답(후퇴 판도).
+ *  번개 손 · 행운 · 최고 집중 · 숙련(현실 연결)은 교실 판의 시간 · 스킬 기준이라 세지 않는다 */
+export function battleStatUpdate(b: FinishedBattle): { adds: string[]; values: Record<string, unknown> } | null {
+  const adds: string[] = [];
+  const values: Record<string, unknown> = {};
+  const add = (field: string, key: string, value: unknown) => {
+    adds.push(`${field} ${key}`);
+    values[key] = value;
+  };
+  if (b.Corrects > 0) add('CorrectAnswers', ':correct', b.Corrects);
+  if (b.Kills > 0) add('BattleKills', ':kills', b.Kills);
+  if (b.Recites > 0) add('BattleRecites', ':recites', b.Recites);
+  if (b.Interrupts > 0) add('BossInterrupts', ':breaks', b.Interrupts);
+  if (b.Dodged > 0) add('BattleDodges', ':dodged', b.Dodged);
+  if (b.Win) {
+    add('QuizzesCompleted', ':one', 1);
+    if (b.QuizID) add('ClearedQuizIds', ':quiz', new Set([String(b.QuizID)]));
+    if (b.CharacterId) add('CharactersPlayed', ':char', new Set([b.CharacterId]));
+    if (b.Wrong === 0 && b.Corrects > 0) adds.push('PerfectQuizzes :one');
+  }
+  return adds.length ? { adds, values } : null;
+}
+
+/** 전투 판 한 판을 진행도에 더한다 (더할 것이 없으면 false). 두 번 부르지 않는 것은 부르는 쪽(판 마감 조건)이 지킨다 */
+export async function addFinishedBattle(b: FinishedBattle): Promise<boolean> {
+  const u = battleStatUpdate(b);
+  if (!u) return false;
+  await client.send(
+    new UpdateItemCommand({
+      TableName: STATS_TABLE,
+      Key: marshall({ PlayerID: b.PlayerID }),
+      UpdateExpression: `ADD ${u.adds.join(', ')}`,
+      ExpressionAttributeValues: marshall(u.values, { convertClassInstanceToMap: false }),
+    })
+  );
   return true;
 }
 

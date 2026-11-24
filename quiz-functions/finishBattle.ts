@@ -12,6 +12,7 @@
 //     3) 문제별 정답률(PlayerQuestionStats — 커리어 정답률 표)에 더한다
 //     4) 의뢰 완료(win)면 판 끝 우유 1 (quizMilk.ts — 교실 판과 같은 하루 상한, Suspicious 면 없음)
 //     5) 마도서 칸: Pool 의 문제마다 외웠는지(세 번 넘게 풀고 80% 넘게 맞힘) · 이번 판으로 새로 외운 식
+//     + 도전과제 진행도 (PlayerStats — achievementStats.ts addFinishedBattle, 2026-11-24): 기존 도전과제 다섯 + 전투 4종
 //   같은 BattleId 를 다시 받으면(응답을 못 받아 다시 보냄) 적어 둔 Summary 를 그대로 돌려준다 — 정답률 · 우유를 두 번 더하지 않는다.
 // ========================================
 import type { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
@@ -20,6 +21,7 @@ import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
 import { createErrorResponse, createSuccessResponse } from 'quiz-utils/idempotencyUtils';
 import { gradeUserAnswer } from 'quiz-utils/gradingManager';
 import { addCounts, readStats } from './questionStats';
+import { addFinishedBattle } from './achievementStats';
 import { grantQuizMilk } from './quizMilk';
 import { grimoire, parseFinishRequest, suspicious, updateRecord, type BattleRecord, type BattleSession } from './battleRules';
 
@@ -169,6 +171,27 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       console.error('[FinishBattle] question stats failed', e);
     }
 
+    // 3-2) 도전과제 진행도 (2026-11-24, 사용자: "기존 반영 + 전투 4종") — 맞힌 수로 낼 수 없는 판은 세지 않는다. 실패해도 판 끝은 막지 않는다
+    let achievementsAdded = false;
+    if (why.length === 0) {
+      try {
+        achievementsAdded = await addFinishedBattle({
+          PlayerID: me,
+          Win: req.win,
+          QuizID: battle.QuizID,
+          CharacterId: battle.CharacterId,
+          Corrects: corrects,
+          Wrong: graded - corrects,
+          Kills: req.stats.Kills,
+          Recites: req.stats.Recites,
+          Interrupts: req.stats.Interrupts,
+          Dodged: req.stats.Dodged,
+        });
+      } catch (e) {
+        console.error('[FinishBattle] achievement stats failed', e);
+      }
+    }
+
     // 4) 의뢰 완료면 판 끝 우유 1 (교실 판과 같은 하루 상한) — 맞힌 수로 낼 수 없는 판(Suspicious)에는 주지 않는다
     if (req.win && why.length === 0) {
       try {
@@ -195,7 +218,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
     console.log(
       `[FinishBattle] ${me} ${battle.BattleId} ${key} ${summary.Result} answers ${graded} corrects ${corrects} damage ${req.stats.Damage} kills ${req.stats.Kills}` +
         ` plays ${record.Plays} wins ${record.Wins} best ${record.BestDamage}${why.length ? ' SUSPICIOUS ' + why.join(',') : ''}` +
-        ` milk ${summary.Milk ? JSON.stringify(summary.Milk) : '-'} book ${book ? `${book.Learned}/${book.Total}` : '-'}`
+        ` milk ${summary.Milk ? JSON.stringify(summary.Milk) : '-'} book ${book ? `${book.Learned}/${book.Total}` : '-'} achievements ${achievementsAdded ? 'added' : '-'}`
     );
     return createSuccessResponse({ ...summary, Grimoire: book, Replayed: false });
   } catch (e) {

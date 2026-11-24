@@ -49,6 +49,10 @@ export async function computeStats(playerId: string, extra?: { mastered?: number
     CharactersPlayed: stats.CharactersPlayed ? stats.CharactersPlayed.size : 0,
     LuckyHits: Number(stats.LuckyHits) || 0,
     FocusMaxQuizzes: Number(stats.FocusMaxQuizzes) || 0,
+    BattleKills: Number(stats.BattleKills) || 0,
+    BattleRecites: Number(stats.BattleRecites) || 0,
+    BossInterrupts: Number(stats.BossInterrupts) || 0,
+    BattleDodges: Number(stats.BattleDodges) || 0,
   };
 }
 

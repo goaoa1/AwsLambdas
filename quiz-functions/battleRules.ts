@@ -98,6 +98,7 @@ export interface FinishStats {
   BossDown: boolean;
   Dodged: number;
   Taken: number;
+  Interrupts: number;   // 보스의 두루마리 읽기를 끊은 수 (전투 도전과제 '두루마리 끊기', 2026-11-24)
 }
 
 export interface FinishRequest {
@@ -135,6 +136,7 @@ export function parseFinishRequest(body: unknown): FinishRequest | string {
     BossDown: st.BossDown === true,
     Dodged: Math.round(num(st.Dodged, 100000)),
     Taken: Math.round(num(st.Taken, 100000)),
+    Interrupts: Math.round(num(st.Interrupts, 100000)),
   };
   const rawAnswers = Array.isArray(b.Answers) ? b.Answers : [];
   if (rawAnswers.length > MAX_ANSWERS) return 'Too many answers';
@@ -156,6 +158,11 @@ export function suspicious(req: FinishRequest, elapsedMs: number, corrects: numb
   if (req.answers.length > req.seconds * 3 + 10) why.push('answers>time');
   if (req.stats.Damage > corrects * DAMAGE_PER_CORRECT_CAP + req.seconds * ALLY_DAMAGE_PER_SECOND) why.push('damage>corrects');
   if (req.stats.Recites > corrects) why.push('recites>corrects');
+  // 전투 도전과제(2026-11-24)가 세는 것: 끊기는 내 주문(맞힌 한 발 · 모아 쏜 한 방)으로만, 큰 공격은 2.5초 간격 + 예고라 초당 0.5 를 못 넘고,
+  //   마물은 한 발에 터짐 · 번짐으로 여럿 잡힐 수 있어 넉넉히
+  if (req.stats.Interrupts > corrects) why.push('interrupts>corrects');
+  if (req.stats.Dodged > req.seconds / 2 + 5) why.push('dodged>time');
+  if (req.stats.Kills > corrects * 8 + 10) why.push('kills>corrects');
   return why;
 }
 

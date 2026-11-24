@@ -84,7 +84,7 @@ aws(
   `iam put-role-policy --role-name ${ROLE_NAME} --policy-name TT_AccessBattleTables --policy-document ${jsonFile('policy.json', {
     Version: '2012-10-17',
     Statement: [
-      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: [tableArn('PlayerResources'), tableArn('PlayerQuestionStats')] },
+      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: [tableArn('PlayerResources'), tableArn('PlayerQuestionStats'), tableArn('PlayerStats')] },
       // 판 끝의 다시 채점: 문제표 (question/Question_0.json)
       { Effect: 'Allow', Action: ['s3:GetObject'], Resource: [`arn:aws:s3:::${quizBucket}/question/*`, `arn:aws:s3:::${quizBucket}/quiz/*`] },
       // 기기 검사(deviceGuard)용

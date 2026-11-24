@@ -43,7 +43,12 @@ export type StatKey =
   | 'GiftsSent'
   | 'CharactersPlayed'
   | 'LuckyHits'
-  | 'FocusMaxQuizzes';
+  | 'FocusMaxQuizzes'
+  // 전투 판 (2026-11-24 — finishBattle.ts 가 판 끝에 더한다)
+  | 'BattleKills'
+  | 'BattleRecites'
+  | 'BossInterrupts'
+  | 'BattleDodges';
 
 // '단 정복'에 세는 퀴즈 (QuizID 1~9 = 11×11~19×19). 0 은 예전 시험용 퀴즈라 세지 않는다
 export const TABLE_QUIZ_IDS = new Set(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
@@ -56,6 +61,10 @@ export const TITLES: Record<string, string> = {
   Title_Attendance: '개근왕',
   Title_Lucky: '행운아',
   Title_Focus: '몰입의 달인',
+  // 전투 도전과제 (2026-11-24)
+  Title_MonsterHunter: '마물 사냥꾼',
+  Title_Reciter: '암송가',
+  Title_SpellBreaker: '주문 끊는 자',
 };
 
 // 전용 의상 (4단계). 여기 없는 의상 보상 단계는 '준비 중'(Locked).
@@ -163,6 +172,41 @@ export const ACHIEVEMENTS: Achievement[] = [
       { Goal: 5, Reward: { Credits: 30 } },
       { Goal: 20, Reward: { Credits: 80 } },
       { Goal: 50, Reward: { Title: 'Title_Focus' } },
+    ],
+  },
+  // ---- 전투 판 (2026-11-24, 사용자: "기존 반영 + 전투 4종") ----
+  //   전투 판은 위의 퀴즈 완주(의뢰 완료) · 단 정복 · 누적 정답(후퇴 판도) · 완벽한 퀴즈(틀린 식 없이 의뢰 완료) · 모두와 함께에도 쌓인다 (achievementStats.ts battleStatUpdate)
+  {
+    Id: 'BattleHunter', Category: 'Play', Name: '마물 사냥꾼', Desc: '전투에서 마물 {Goal}마리 잡기', Stat: 'BattleKills',
+    Tiers: [
+      { Goal: 30, Reward: { Credits: 30 } },
+      { Goal: 200, Reward: { Credits: 80 } },
+      { Goal: 1000, Reward: { Credits: 200 } },
+      { Goal: 3000, Reward: { Title: 'Title_MonsterHunter' } },
+    ],
+  },
+  {
+    Id: 'BattleReciter', Category: 'Skill', Name: '암송가', Desc: '전투에서 암송 {Goal}번 (식이 뜬 뒤 3초 안에 맞히기)', Stat: 'BattleRecites',
+    Tiers: [
+      { Goal: 30, Reward: { Credits: 30 } },
+      { Goal: 200, Reward: { Credits: 100 } },
+      { Goal: 1000, Reward: { Title: 'Title_Reciter' } },
+    ],
+  },
+  {
+    Id: 'ScrollBreaker', Category: 'Skill', Name: '두루마리 끊기', Desc: '보스의 두루마리 읽기 {Goal}번 끊기', Stat: 'BossInterrupts',
+    Tiers: [
+      { Goal: 5, Reward: { Credits: 50 } },
+      { Goal: 30, Reward: { Credits: 120 } },
+      { Goal: 100, Reward: { Title: 'Title_SpellBreaker' } },
+    ],
+  },
+  {
+    Id: 'EvadeMaster', Category: 'Skill', Name: '회피 달인', Desc: '전투에서 큰 공격 {Goal}번 피하기', Stat: 'BattleDodges',
+    Tiers: [
+      { Goal: 10, Reward: { Credits: 30 } },
+      { Goal: 50, Reward: { Credits: 80 } },
+      { Goal: 200, Reward: { Items: { Item_StaminaFull: 1 } } },
     ],
   },
 ];
