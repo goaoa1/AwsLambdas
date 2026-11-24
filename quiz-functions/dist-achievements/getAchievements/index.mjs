@@ -22,7 +22,11 @@ var TITLES = {
   Title_Lightning: "\uBC88\uAC1C \uC190",
   Title_Attendance: "\uAC1C\uADFC\uC655",
   Title_Lucky: "\uD589\uC6B4\uC544",
-  Title_Focus: "\uBAB0\uC785\uC758 \uB2EC\uC778"
+  Title_Focus: "\uBAB0\uC785\uC758 \uB2EC\uC778",
+  // 전투 도전과제 (2026-11-24)
+  Title_MonsterHunter: "\uB9C8\uBB3C \uC0AC\uB0E5\uAFBC",
+  Title_Reciter: "\uC554\uC1A1\uAC00",
+  Title_SpellBreaker: "\uC8FC\uBB38 \uB04A\uB294 \uC790"
 };
 var EXCLUSIVE_OUTFITS_READY = /* @__PURE__ */ new Set(["Outfit_Exclusive_Scholar"]);
 var ACHIEVEMENTS = [
@@ -175,6 +179,57 @@ var ACHIEVEMENTS = [
       { Goal: 20, Reward: { Credits: 80 } },
       { Goal: 50, Reward: { Title: "Title_Focus" } }
     ]
+  },
+  // ---- 전투 판 (2026-11-24, 사용자: "기존 반영 + 전투 4종") ----
+  //   전투 판은 위의 퀴즈 완주(의뢰 완료) · 단 정복 · 누적 정답(후퇴 판도) · 완벽한 퀴즈(틀린 식 없이 의뢰 완료) · 모두와 함께에도 쌓인다 (achievementStats.ts battleStatUpdate)
+  {
+    Id: "BattleHunter",
+    Category: "Play",
+    Name: "\uB9C8\uBB3C \uC0AC\uB0E5\uAFBC",
+    Desc: "\uC804\uD22C\uC5D0\uC11C \uB9C8\uBB3C {Goal}\uB9C8\uB9AC \uC7A1\uAE30",
+    Stat: "BattleKills",
+    Tiers: [
+      { Goal: 30, Reward: { Credits: 30 } },
+      { Goal: 200, Reward: { Credits: 80 } },
+      { Goal: 1e3, Reward: { Credits: 200 } },
+      { Goal: 3e3, Reward: { Title: "Title_MonsterHunter" } }
+    ]
+  },
+  {
+    Id: "BattleReciter",
+    Category: "Skill",
+    Name: "\uC554\uC1A1\uAC00",
+    Desc: "\uC804\uD22C\uC5D0\uC11C \uC554\uC1A1 {Goal}\uBC88 (\uC2DD\uC774 \uB72C \uB4A4 3\uCD08 \uC548\uC5D0 \uB9DE\uD788\uAE30)",
+    Stat: "BattleRecites",
+    Tiers: [
+      { Goal: 30, Reward: { Credits: 30 } },
+      { Goal: 200, Reward: { Credits: 100 } },
+      { Goal: 1e3, Reward: { Title: "Title_Reciter" } }
+    ]
+  },
+  {
+    Id: "ScrollBreaker",
+    Category: "Skill",
+    Name: "\uB450\uB8E8\uB9C8\uB9AC \uB04A\uAE30",
+    Desc: "\uBCF4\uC2A4\uC758 \uB450\uB8E8\uB9C8\uB9AC \uC77D\uAE30 {Goal}\uBC88 \uB04A\uAE30",
+    Stat: "BossInterrupts",
+    Tiers: [
+      { Goal: 5, Reward: { Credits: 50 } },
+      { Goal: 30, Reward: { Credits: 120 } },
+      { Goal: 100, Reward: { Title: "Title_SpellBreaker" } }
+    ]
+  },
+  {
+    Id: "EvadeMaster",
+    Category: "Skill",
+    Name: "\uD68C\uD53C \uB2EC\uC778",
+    Desc: "\uC804\uD22C\uC5D0\uC11C \uD070 \uACF5\uACA9 {Goal}\uBC88 \uD53C\uD558\uAE30",
+    Stat: "BattleDodges",
+    Tiers: [
+      { Goal: 10, Reward: { Credits: 30 } },
+      { Goal: 50, Reward: { Credits: 80 } },
+      { Goal: 200, Reward: { Items: { Item_StaminaFull: 1 } } }
+    ]
   }
 ];
 function tierReached(a, progress, tier) {
@@ -300,7 +355,11 @@ async function computeStats(playerId, extra) {
     GiftsSent: Number(stats.GiftsSent) || 0,
     CharactersPlayed: stats.CharactersPlayed ? stats.CharactersPlayed.size : 0,
     LuckyHits: Number(stats.LuckyHits) || 0,
-    FocusMaxQuizzes: Number(stats.FocusMaxQuizzes) || 0
+    FocusMaxQuizzes: Number(stats.FocusMaxQuizzes) || 0,
+    BattleKills: Number(stats.BattleKills) || 0,
+    BattleRecites: Number(stats.BattleRecites) || 0,
+    BossInterrupts: Number(stats.BossInterrupts) || 0,
+    BattleDodges: Number(stats.BattleDodges) || 0
   };
 }
 async function readClaimed(playerId) {
