@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const BATTLE_FUNCTIONS = ['startBattle', 'finishBattle'];
+export const BATTLE_FUNCTIONS = ['startBattle', 'finishBattle', 'getBattleRecords'];   // getBattleRecords: 마도서 창의 전투 기록 (2026-11-24)
 const outRoot = 'dist-battle';
 rmSync(outRoot, { recursive: true, force: true });
 mkdirSync(outRoot, { recursive: true });

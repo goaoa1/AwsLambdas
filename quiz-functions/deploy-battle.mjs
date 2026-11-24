@@ -1,7 +1,8 @@
 // ========================================
 // deploy-battle.mjs - 전투 판 입장(전투 개편 S7a) 배포 (aws cli, 프로필 inchul, ap-northeast-2) 2026-11-24
 //   먼저:  node build-battle.mjs
-//   실행:  node deploy-battle.mjs [--dry]      (SSO 로그인 + 빌드 + 배포를 한 번에: deploy-battle.ps1)
+//   실행:  node deploy-battle.mjs [--dry] [--only Fn1,Fn2]      (SSO 로그인 + 빌드 + 배포를 한 번에: deploy-battle.ps1)
+//          --only: 그 함수만 (예: --only GetBattleRecords — 마도서 창의 전투 기록, deploy-battle-records.ps1)
 //   1. 역할 TT_BattleLambdaRole (PlayerResources · PlayerQuestionStats 읽기/쓰기, PlayerDevices 읽기, 퀴즈 버킷의 문제표 읽기)
 //   2. Lambda StartBattle (S7a) · FinishBattle (S7b — 판 끝: 다시 채점 · 정답률 · 전투 기록 · 우유)
 //   3. REST: POST /start-battle · POST /finish-battle → stage_1 배포
@@ -27,7 +28,13 @@ const DRY = process.argv.includes('--dry');
 const ROUTES = [
   { zip: 'startBattle', fn: 'StartBattle', method: 'POST', path: 'start-battle' },
   { zip: 'finishBattle', fn: 'FinishBattle', method: 'POST', path: 'finish-battle' },
+  // 마도서 창의 전투 기록 (2026-11-24): 판 끝이 적은 BattleRecords · BattleTotals 를 읽기만
+  { zip: 'getBattleRecords', fn: 'GetBattleRecords', method: 'GET', path: 'get-battle-records' },
 ];
+const onlyAt = process.argv.indexOf('--only');
+const ONLY = onlyAt >= 0 ? (process.argv[onlyAt + 1] || '').split(',').filter(Boolean) : null;
+const ACTIVE = ONLY ? ROUTES.filter((r) => ONLY.includes(r.fn)) : ROUTES;
+if (ONLY && ACTIVE.length !== ONLY.length) throw new Error(`--only: 모르는 함수 ${ONLY.join(',')}`);
 
 const tmp = mkdtempSync(join(tmpdir(), 'battle-deploy-'));
 function aws(args, { json = true, allowFail = false, mutating = true } = {}) {
@@ -99,7 +106,7 @@ if (newRole && !DRY) {
 
 // 2. Lambda
 const envFile = jsonFile('env.json', { Variables: { REGION, QUIZ_BUCKET_NAME: quizBucket } });
-for (const { zip, fn } of ROUTES) {
+for (const { zip, fn } of ACTIVE) {
   const exists = read(`lambda get-function-configuration --function-name ${fn}`, { allowFail: true });
   if (!exists) {
     let ok = false;
@@ -125,7 +132,7 @@ for (const { zip, fn } of ROUTES) {
 const resources = read(`apigateway get-resources --rest-api-id ${API_ID} --limit 500`).items;
 const root = resources.find((r) => r.path === '/');
 let changed = false;
-for (const { fn, method, path } of ROUTES) {
+for (const { fn, method, path } of ACTIVE) {
   let res = resources.find((r) => r.path === `/${path}`);
   if (!res) {
     res = aws(`apigateway create-resource --rest-api-id ${API_ID} --parent-id ${root.id} --path-part ${path}`) || { id: 'DRY', resourceMethods: {} };
@@ -147,5 +154,5 @@ for (const { fn, method, path } of ROUTES) {
 if (changed) aws(`apigateway create-deployment --rest-api-id ${API_ID} --stage-name ${STAGE} --description "battle ${new Date().toISOString()}"`);
 
 // 4. 기기 검사
-if (!DRY) execSync(`node wrap-device-guard.mjs --only ${ROUTES.map((r) => r.fn).join(',')}`, { stdio: 'inherit' });
+if (!DRY) execSync(`node wrap-device-guard.mjs --only ${ACTIVE.map((r) => r.fn).join(',')}`, { stdio: 'inherit' });
 console.log('완료.');
