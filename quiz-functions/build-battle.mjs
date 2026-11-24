@@ -7,7 +7,7 @@ import { execSync } from 'node:child_process';
 import { mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
-export const BATTLE_FUNCTIONS = ['startBattle'];
+export const BATTLE_FUNCTIONS = ['startBattle', 'finishBattle'];
 const outRoot = 'dist-battle';
 rmSync(outRoot, { recursive: true, force: true });
 mkdirSync(outRoot, { recursive: true });

@@ -2,9 +2,9 @@
 // deploy-battle.mjs - 전투 판 입장(전투 개편 S7a) 배포 (aws cli, 프로필 inchul, ap-northeast-2) 2026-11-24
 //   먼저:  node build-battle.mjs
 //   실행:  node deploy-battle.mjs [--dry]      (SSO 로그인 + 빌드 + 배포를 한 번에: deploy-battle.ps1)
-//   1. 역할 TT_BattleLambdaRole (PlayerResources 읽기/쓰기, PlayerDevices 읽기)
-//   2. Lambda StartBattle
-//   3. REST: POST /start-battle → stage_1 배포
+//   1. 역할 TT_BattleLambdaRole (PlayerResources · PlayerQuestionStats 읽기/쓰기, PlayerDevices 읽기, 퀴즈 버킷의 문제표 읽기)
+//   2. Lambda StartBattle (S7a) · FinishBattle (S7b — 판 끝: 다시 채점 · 정답률 · 전투 기록 · 우유)
+//   3. REST: POST /start-battle · POST /finish-battle → stage_1 배포
 //   4. 기기 검사 끼우기 (wrap-device-guard.mjs)
 //   테이블은 새로 만들지 않는다 — 판은 PlayerResources.BattleSession 맵에 들어간다 (battleRules.ts).
 // ========================================
@@ -26,6 +26,7 @@ const DRY = process.argv.includes('--dry');
 
 const ROUTES = [
   { zip: 'startBattle', fn: 'StartBattle', method: 'POST', path: 'start-battle' },
+  { zip: 'finishBattle', fn: 'FinishBattle', method: 'POST', path: 'finish-battle' },
 ];
 
 const tmp = mkdtempSync(join(tmpdir(), 'battle-deploy-'));
@@ -59,6 +60,9 @@ const accountId = read(`sts get-caller-identity`).Account;
 const template = read(`lambda get-function-configuration --function-name ${TEMPLATE_FUNCTION}`);
 const layers = (template.Layers || []).map((l) => l.Arn);
 const tableArn = (t) => `arn:aws:dynamodb:${REGION}:${accountId}:table/${t}`;
+// 판 끝의 다시 채점(quiz-utils gradeUserAnswer)이 읽는 문제표 — 교실 판 StartQuizSession 과 같은 버킷
+const quizBucket = (read(`lambda get-function-configuration --function-name StartQuizSession`).Environment?.Variables || {}).QUIZ_BUCKET_NAME;
+if (!quizBucket) throw new Error('StartQuizSession 에 QUIZ_BUCKET_NAME 이 없음');
 
 // 1. 역할
 let roleArn = `arn:aws:iam::${accountId}:role/${ROLE_NAME}`;
@@ -80,7 +84,9 @@ aws(
   `iam put-role-policy --role-name ${ROLE_NAME} --policy-name TT_AccessBattleTables --policy-document ${jsonFile('policy.json', {
     Version: '2012-10-17',
     Statement: [
-      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: [tableArn('PlayerResources')] },
+      { Effect: 'Allow', Action: ['dynamodb:GetItem', 'dynamodb:UpdateItem'], Resource: [tableArn('PlayerResources'), tableArn('PlayerQuestionStats')] },
+      // 판 끝의 다시 채점: 문제표 (question/Question_0.json)
+      { Effect: 'Allow', Action: ['s3:GetObject'], Resource: [`arn:aws:s3:::${quizBucket}/question/*`, `arn:aws:s3:::${quizBucket}/quiz/*`] },
       // 기기 검사(deviceGuard)용
       { Effect: 'Allow', Action: ['dynamodb:GetItem'], Resource: [tableArn('PlayerDevices')] },
     ],
@@ -92,7 +98,7 @@ if (newRole && !DRY) {
 }
 
 // 2. Lambda
-const envFile = jsonFile('env.json', { Variables: { REGION } });
+const envFile = jsonFile('env.json', { Variables: { REGION, QUIZ_BUCKET_NAME: quizBucket } });
 for (const { zip, fn } of ROUTES) {
   const exists = read(`lambda get-function-configuration --function-name ${fn}`, { allowFail: true });
   if (!exists) {
