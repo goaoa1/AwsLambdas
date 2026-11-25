@@ -12,6 +12,7 @@
 //     3) 문제별 정답률(PlayerQuestionStats — 커리어 정답률 표)에 더한다
 //     4) 의뢰 완료(win)면 판 끝 우유 1 (quizMilk.ts — 교실 판과 같은 하루 상한, Suspicious 면 없음)
 //     5) 마도서 칸: Pool 의 문제마다 외웠는지(세 번 넘게 풀고 80% 넘게 맞힘) · 이번 판으로 새로 외운 식
+//     + 의뢰 완료면 장비 · 스킬 책 보상 (gearRewards.ts — 2026-11-25 장비 · 스킬 G1, Docs/장비_스킬_계획.md §2-3) → Rewards [{ ItemId, Name, Kind, Count }]
 //     + 도전과제 진행도 (PlayerStats — achievementStats.ts addFinishedBattle, 2026-11-24): 기존 도전과제 다섯 + 전투 4종
 //   같은 BattleId 를 다시 받으면(응답을 못 받아 다시 보냄) 적어 둔 Summary 를 그대로 돌려준다 — 정답률 · 우유를 두 번 더하지 않는다.
 // ========================================
@@ -23,6 +24,7 @@ import { gradeUserAnswer } from 'quiz-utils/gradingManager';
 import { addCounts, readStats } from './questionStats';
 import { addFinishedBattle } from './achievementStats';
 import { grantQuizMilk } from './quizMilk';
+import { grantBattleRewards, type RewardLine } from './gearRewards';
 import { grimoire, parseFinishRequest, suspicious, updateRecord, type BattleRecord, type BattleSession } from './battleRules';
 
 const dynamoDBClient = new DynamoDBClient({ region: process.env.REGION });
@@ -136,6 +138,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       Record: { Key: key, ...record },
       NewBest: newBest,
       Milk: null,
+      Rewards: [] as RewardLine[],
       Suspicious: why,
     };
     try {
@@ -213,12 +216,36 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
       }
     }
 
+    // 4-2) 장비 · 스킬 책 보상 (2026-11-25, 사용자: "장비 · 스킬 … 전투 보상") — 의뢰 완료 · 믿을 수 있는 판만. 실패해도 판 끝은 막지 않는다
+    if (req.win && why.length === 0) {
+      try {
+        const rewards = await grantBattleRewards(me, String(battle.Difficulty || 'normal'), String(battle.QuizID || '1'), req.stats.BossDown);
+        summary.Rewards = rewards;
+        if (rewards.length) {
+          await dynamoDBClient
+            .send(
+              new UpdateItemCommand({
+                TableName: PLAYER_TABLE,
+                Key: marshall({ PlayerID: me }),
+                UpdateExpression: 'SET BattleSession.Summary.Rewards = :rw',
+                ConditionExpression: 'BattleSession.BattleId = :id',
+                ExpressionAttributeValues: marshall({ ':rw': rewards, ':id': battle.BattleId }, { removeUndefinedValues: true }),
+              })
+            )
+            .catch((e) => console.error('[FinishBattle] rewards summary failed', e));
+        }
+      } catch (e) {
+        console.error('[FinishBattle] rewards failed', e);
+      }
+    }
+
     // 5) 마도서 칸
     const book = await grimoireFor(me, req.pool, counts);
     console.log(
       `[FinishBattle] ${me} ${battle.BattleId} ${key} ${summary.Result} answers ${graded} corrects ${corrects} damage ${req.stats.Damage} kills ${req.stats.Kills}` +
         ` plays ${record.Plays} wins ${record.Wins} best ${record.BestDamage}${why.length ? ' SUSPICIOUS ' + why.join(',') : ''}` +
-        ` milk ${summary.Milk ? JSON.stringify(summary.Milk) : '-'} book ${book ? `${book.Learned}/${book.Total}` : '-'} achievements ${achievementsAdded ? 'added' : '-'}`
+        ` milk ${summary.Milk ? JSON.stringify(summary.Milk) : '-'} rewards ${(summary.Rewards as RewardLine[]).map((r) => `${r.ItemId}x${r.Count}`).join(',') || '-'}` +
+        ` book ${book ? `${book.Learned}/${book.Total}` : '-'} achievements ${achievementsAdded ? 'added' : '-'}`
     );
     return createSuccessResponse({ ...summary, Grimoire: book, Replayed: false });
   } catch (e) {
