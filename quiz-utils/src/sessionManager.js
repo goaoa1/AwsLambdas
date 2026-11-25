@@ -18,6 +18,9 @@ export async function getActiveSession(playerID) {
       TableName: SESSIONS_TABLE,
       // DB 파티션 키 이름은 PascalCase인 PlayerID
       Key: marshall({ PlayerID: playerID }),
+      // 강한 일관 읽기 (2026-11-25): 답 응답 바로 뒤의 GetActiveQuestion 이 쓰기 전 세션(방금 채점한 문제)을 돌려준 일이 있음(2026-11-23).
+      //   이 함수를 쓰는 읽고-쓰기(updateSession · processQuizStep · pause/resume)도 낡은 세션으로 덮어쓰지 않게
+      ConsistentRead: true,
     });
 
     const result = await dynamoDBClient.send(getItemCommand);
