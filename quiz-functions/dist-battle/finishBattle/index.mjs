@@ -157,7 +157,7 @@ import { DynamoDBClient as DynamoDBClient5, UpdateItemCommand as UpdateItemComma
 import { marshall as marshall4 } from "@aws-sdk/util-dynamodb";
 
 // gearCatalog.ts
-var MAX_GEAR_COUNT = 4;
+var MAX_GEAR_COUNT = 5;
 var BOOK_ID = "Book_Skill";
 var BOOK_NAME = "\uC2A4\uD0AC \uCC45";
 var MAX_BOOK_COUNT = 99;

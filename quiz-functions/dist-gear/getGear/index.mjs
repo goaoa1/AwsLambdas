@@ -25,15 +25,16 @@ import { DynamoDBClient as DynamoDBClient2, GetItemCommand as GetItemCommand3 } 
 import { marshall as marshall3, unmarshall as unmarshall3 } from "@aws-sdk/util-dynamodb";
 
 // gearCatalog.ts
-var CHARACTERS = ["Char_001", "Char_002", "Char_003", "Char_004"];
+var CHARACTERS = ["Player", "Char_001", "Char_002", "Char_003", "Char_004"];
 var SLOTS = ["Weapon", "Armor", "Accessory"];
-var MAX_GEAR_COUNT = 4;
+var MAX_GEAR_COUNT = 5;
 var BOOK_ID = "Book_Skill";
 var MAX_SKILL_LEVEL = 5;
 var BOOKS_TO_LEVEL = [0, 0, 1, 2, 3, 4];
 var SKILL_IDS = ["blast", "chain", "lance", "barrage", "meteor", "frost"];
 var MAX_SKILLS = 3;
 var DEFAULT_SKILLS = {
+  Player: ["blast", "chain", "frost"],
   Char_001: ["barrage", "lance", "chain"],
   Char_002: ["meteor", "blast", "frost"],
   Char_003: ["blast", "lance", "barrage"],

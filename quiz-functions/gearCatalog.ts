@@ -31,9 +31,11 @@ export interface GearDef {
   Level: number; // 강화 자리 (지금은 늘 0 — 강화 없음, 사용자 2026-11-25)
 }
 
-export const CHARACTERS = ['Char_001', 'Char_002', 'Char_003', 'Char_004'];
+// 'Player' = 전투의 플레이어 아바타 (2026-11-27 — 게임 Docs/퀴즈맵_전투_개편_계획.md §89, 사용자: "플레이어 아바타를 … 숄더뷰로" · "메뉴에서 캐릭터 고르는 부분을 없앤다"):
+//   나도 장비 칸 셋 · 스킬 셋을 가진다 (넷은 동료 — 장비만 쓴다)
+export const CHARACTERS = ['Player', 'Char_001', 'Char_002', 'Char_003', 'Char_004'];
 export const SLOTS: GearSlot[] = ['Weapon', 'Armor', 'Accessory'];
-export const MAX_GEAR_COUNT = 4; // 장비 하나를 가질 수 있는 수 (캐릭터 수만큼 — 넷이 같은 것을 낄 수 있게)
+export const MAX_GEAR_COUNT = 5; // 장비 하나를 가질 수 있는 수 (캐릭터 수만큼 — 나 + 넷이 같은 것을 낄 수 있게, §89 에서 4 → 5)
 
 export const BOOK_ID = 'Book_Skill';
 export const BOOK_NAME = '스킬 책';
@@ -49,6 +51,7 @@ export const SKILL_IDS = ['blast', 'chain', 'lance', 'barrage', 'meteor', 'frost
 export const MAX_SKILLS = 3;
 // 고른 적이 없을 때 (게임 waves.json skill_loadout.default 와 같게)
 export const DEFAULT_SKILLS: Record<string, string[]> = {
+  Player: ['blast', 'chain', 'frost'],
   Char_001: ['barrage', 'lance', 'chain'],
   Char_002: ['meteor', 'blast', 'frost'],
   Char_003: ['blast', 'lance', 'barrage'],
