@@ -31,6 +31,14 @@ var MAX_GEAR_COUNT = 4;
 var BOOK_ID = "Book_Skill";
 var MAX_SKILL_LEVEL = 5;
 var BOOKS_TO_LEVEL = [0, 0, 1, 2, 3, 4];
+var SKILL_IDS = ["blast", "chain", "lance", "barrage", "meteor", "frost"];
+var MAX_SKILLS = 3;
+var DEFAULT_SKILLS = {
+  Char_001: ["barrage", "lance", "chain"],
+  Char_002: ["meteor", "blast", "frost"],
+  Char_003: ["blast", "lance", "barrage"],
+  Char_004: ["chain", "frost", "lance"]
+};
 var GEAR = [
   { ItemId: "Gear_W_Branch", Slot: "Weapon", Rarity: "Common", Name: "\uB098\uBB47\uAC00\uC9C0 \uC9C0\uD321\uC774", Desc: "\uC8FC\uBB38 \uC704\uB825 +10%", Stats: { Power: 0.1 }, Price: 120, Level: 0 },
   { ItemId: "Gear_W_Oak", Slot: "Weapon", Rarity: "Rare", Name: "\uCC38\uB098\uBB34 \uC9C0\uD321\uC774", Desc: "\uC8FC\uBB38 \uC704\uB825 +20%", Stats: { Power: 0.2 }, Price: 300, Level: 0 },
@@ -42,6 +50,9 @@ var GEAR = [
   { ItemId: "Gear_C_Ring", Slot: "Accessory", Rarity: "Rare", Name: "\uB9C8\uB825 \uBC18\uC9C0", Desc: "\uB9C8\uB825 +25%", Stats: { Mana: 0.25 }, Price: 260, Level: 0 },
   { ItemId: "Gear_C_Pendant", Slot: "Accessory", Rarity: "Epic", Name: "\uACF5\uBA85 \uBAA9\uAC78\uC774", Desc: "\uACF5\uBA85\uC774 30% \uBE68\uB9AC \uCC2C\uB2E4", Stats: { Resonance: 0.3 }, Price: 0, Level: 0 }
 ];
+function isSkillId(id) {
+  return typeof id === "string" && SKILL_IDS.includes(id);
+}
 
 // gearStore.ts
 var PLAYER_TABLE = "PlayerResources";
@@ -51,7 +62,7 @@ async function readPlayerGear(playerId) {
     new GetItemCommand3({
       TableName: PLAYER_TABLE,
       Key: marshall3({ PlayerID: playerId }),
-      ProjectionExpression: "PlayerID, #items, Credits, EquippedGear, SkillLevels, GearRev",
+      ProjectionExpression: "PlayerID, #items, Credits, EquippedGear, SkillLevels, SkillLoadout, GearRev",
       ExpressionAttributeNames: { "#items": "Items" },
       // Items 는 DynamoDB 예약어
       ConsistentRead: true
@@ -64,6 +75,10 @@ async function readPlayerGear(playerId) {
   for (const [k, v] of Object.entries(p.EquippedGear ?? {})) if (typeof v === "string" && v) equipped[k] = v;
   const levels = {};
   for (const [k, v] of Object.entries(p.SkillLevels ?? {})) levels[k] = Math.max(1, Math.min(MAX_SKILL_LEVEL, Number(v) || 1));
+  const loadout = {};
+  for (const [k, v] of Object.entries(p.SkillLoadout ?? {})) {
+    if (Array.isArray(v)) loadout[k] = [...new Set(v.map((x) => String(x)).filter(isSkillId))].slice(0, MAX_SKILLS);
+  }
   return {
     Exists: !!r.Item,
     Items: items,
@@ -72,6 +87,7 @@ async function readPlayerGear(playerId) {
     bHasEquipped: p.EquippedGear !== void 0,
     SkillLevels: levels,
     bHasSkillLevels: p.SkillLevels !== void 0,
+    SkillLoadout: loadout,
     Rev: p.GearRev === void 0 ? void 0 : Number(p.GearRev) || 0
   };
 }
@@ -89,6 +105,8 @@ function toClientGear(row) {
   }
   const levels = {};
   for (const c of CHARACTERS) levels[c] = row.SkillLevels[c] ?? 1;
+  const loadout = {};
+  for (const c of CHARACTERS) loadout[c] = row.SkillLoadout[c] ?? DEFAULT_SKILLS[c] ?? [];
   return {
     Gear: GEAR.map((g) => ({
       ItemId: g.ItemId,
@@ -109,6 +127,9 @@ function toClientGear(row) {
     BooksToLevel: BOOKS_TO_LEVEL,
     MaxSkillLevel: MAX_SKILL_LEVEL,
     MaxGearCount: MAX_GEAR_COUNT,
+    SkillLoadout: loadout,
+    MaxSkills: MAX_SKILLS,
+    SkillIds: SKILL_IDS,
     Credits: row.Credits
   };
 }

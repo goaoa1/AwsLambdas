@@ -36,6 +36,14 @@ var MAX_GEAR_COUNT = 4;
 var BOOK_ID = "Book_Skill";
 var MAX_SKILL_LEVEL = 5;
 var BOOKS_TO_LEVEL = [0, 0, 1, 2, 3, 4];
+var SKILL_IDS = ["blast", "chain", "lance", "barrage", "meteor", "frost"];
+var MAX_SKILLS = 3;
+var DEFAULT_SKILLS = {
+  Char_001: ["barrage", "lance", "chain"],
+  Char_002: ["meteor", "blast", "frost"],
+  Char_003: ["blast", "lance", "barrage"],
+  Char_004: ["chain", "frost", "lance"]
+};
 var GEAR = [
   { ItemId: "Gear_W_Branch", Slot: "Weapon", Rarity: "Common", Name: "\uB098\uBB47\uAC00\uC9C0 \uC9C0\uD321\uC774", Desc: "\uC8FC\uBB38 \uC704\uB825 +10%", Stats: { Power: 0.1 }, Price: 120, Level: 0 },
   { ItemId: "Gear_W_Oak", Slot: "Weapon", Rarity: "Rare", Name: "\uCC38\uB098\uBB34 \uC9C0\uD321\uC774", Desc: "\uC8FC\uBB38 \uC704\uB825 +20%", Stats: { Power: 0.2 }, Price: 300, Level: 0 },
@@ -53,6 +61,9 @@ function findGear(id) {
 function isCharacter(id) {
   return typeof id === "string" && CHARACTERS.includes(id);
 }
+function isSkillId(id) {
+  return typeof id === "string" && SKILL_IDS.includes(id);
+}
 function isSlot(s) {
   return typeof s === "string" && SLOTS.includes(s);
 }
@@ -68,7 +79,7 @@ async function readPlayerGear(playerId) {
     new GetItemCommand3({
       TableName: PLAYER_TABLE,
       Key: marshall3({ PlayerID: playerId }),
-      ProjectionExpression: "PlayerID, #items, Credits, EquippedGear, SkillLevels, GearRev",
+      ProjectionExpression: "PlayerID, #items, Credits, EquippedGear, SkillLevels, SkillLoadout, GearRev",
       ExpressionAttributeNames: { "#items": "Items" },
       // Items 는 DynamoDB 예약어
       ConsistentRead: true
@@ -81,6 +92,10 @@ async function readPlayerGear(playerId) {
   for (const [k, v] of Object.entries(p.EquippedGear ?? {})) if (typeof v === "string" && v) equipped[k] = v;
   const levels = {};
   for (const [k, v] of Object.entries(p.SkillLevels ?? {})) levels[k] = Math.max(1, Math.min(MAX_SKILL_LEVEL, Number(v) || 1));
+  const loadout = {};
+  for (const [k, v] of Object.entries(p.SkillLoadout ?? {})) {
+    if (Array.isArray(v)) loadout[k] = [...new Set(v.map((x) => String(x)).filter(isSkillId))].slice(0, MAX_SKILLS);
+  }
   return {
     Exists: !!r.Item,
     Items: items,
@@ -89,6 +104,7 @@ async function readPlayerGear(playerId) {
     bHasEquipped: p.EquippedGear !== void 0,
     SkillLevels: levels,
     bHasSkillLevels: p.SkillLevels !== void 0,
+    SkillLoadout: loadout,
     Rev: p.GearRev === void 0 ? void 0 : Number(p.GearRev) || 0
   };
 }
@@ -109,6 +125,8 @@ function toClientGear(row) {
   }
   const levels = {};
   for (const c of CHARACTERS) levels[c] = row.SkillLevels[c] ?? 1;
+  const loadout = {};
+  for (const c of CHARACTERS) loadout[c] = row.SkillLoadout[c] ?? DEFAULT_SKILLS[c] ?? [];
   return {
     Gear: GEAR.map((g) => ({
       ItemId: g.ItemId,
@@ -129,6 +147,9 @@ function toClientGear(row) {
     BooksToLevel: BOOKS_TO_LEVEL,
     MaxSkillLevel: MAX_SKILL_LEVEL,
     MaxGearCount: MAX_GEAR_COUNT,
+    SkillLoadout: loadout,
+    MaxSkills: MAX_SKILLS,
+    SkillIds: SKILL_IDS,
     Credits: row.Credits
   };
 }
@@ -142,6 +163,8 @@ var handler = async (event) => {
   const characterId = body?.CharacterId;
   const slot = body?.Slot;
   if (!isCharacter(characterId)) return createErrorResponse(400, "Bad character", { Reason: "BadCharacter" });
+  const skills = body?.Skills;
+  if (Array.isArray(skills)) return equipSkills(me, characterId, skills);
   if (!isSlot(slot)) return createErrorResponse(400, "Bad slot", { Reason: "BadSlot" });
   const itemId = String(body?.ItemId ?? "").trim();
   const key = gearKey(characterId, slot);
@@ -184,6 +207,39 @@ var handler = async (event) => {
     return createErrorResponse(500, "Failed to equip");
   }
 };
+async function equipSkills(me, characterId, raw) {
+  const ids = [...new Set(raw.map((v) => String(v ?? "").trim()).filter((v) => v))];
+  if (ids.length > MAX_SKILLS) return createErrorResponse(400, "Too many skills", { Reason: "TooManySkills" });
+  if (ids.some((id) => !isSkillId(id))) return createErrorResponse(400, "Unknown skill", { Reason: "UnknownSkill" });
+  try {
+    const row = await readPlayerGear(me);
+    if (!row.Exists) return createErrorResponse(404, "Player not found", { Reason: "NoPlayer" });
+    const before = row.SkillLoadout[characterId];
+    if (!before || before.join(",") !== ids.join(",")) {
+      const next = { ...row.SkillLoadout, [characterId]: ids };
+      const g = revGuard(row);
+      try {
+        await client2.send(
+          new UpdateItemCommand({
+            TableName: PLAYER_TABLE,
+            Key: marshall4({ PlayerID: me }),
+            UpdateExpression: "SET SkillLoadout = :lo, GearRev = :rev1, UpdatedAt = :now",
+            ConditionExpression: `attribute_exists(PlayerID) AND ${g.cond}`,
+            ExpressionAttributeValues: marshall4({ ":lo": next, ":now": (/* @__PURE__ */ new Date()).toISOString(), ...g.values })
+          })
+        );
+      } catch (e) {
+        if (e.name === "ConditionalCheckFailedException") return createErrorResponse(409, "Try again", { Reason: "Conflict" });
+        throw e;
+      }
+      console.log(`[EquipGear] ${me} skills ${characterId} ${before ? before.join(",") : "(default)"} -> ${ids.join(",") || "(none)"}`);
+    }
+    return createSuccessResponse({ SkillsSet: { CharacterId: characterId, Skills: ids }, ...toClientGear(await readPlayerGear(me)) });
+  } catch (e) {
+    console.error("[EquipGear] skills", e);
+    return createErrorResponse(500, "Failed to set skills");
+  }
+}
 export {
   handler
 };

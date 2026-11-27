@@ -2,6 +2,7 @@
 // gearStore.ts - 장비 · 스킬 레벨 읽기/쓰기 (장비 · 스킬 G1, 2026-11-25)
 //   PlayerResources: Items(개수 — 장비 · 스킬 책), EquippedGear { "Char_001#Weapon": ItemId }, SkillLevels { Char_001: 2 }, Credits
 //   EquippedGear · SkillLevels 는 맵 통째로 바꾼다 — 조건 '읽은 값 그대로'(동시에 두 번 바꿀 때 하나가 덮어쓰지 않게)
+//   SkillLoadout { Char_001: ["barrage", …] } — 공격 스킬 셋 (2026-11-27, 게임 Docs §88). 없는 캐릭터는 DEFAULT_SKILLS 로 돌려준다
 // ========================================
 import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
 import { marshall, unmarshall } from '@aws-sdk/util-dynamodb';
@@ -9,10 +10,14 @@ import {
   BOOK_ID,
   BOOKS_TO_LEVEL,
   CHARACTERS,
+  DEFAULT_SKILLS,
   GEAR,
   MAX_GEAR_COUNT,
   MAX_SKILL_LEVEL,
+  MAX_SKILLS,
+  SKILL_IDS,
   SLOTS,
+  isSkillId,
   type GearSlot,
 } from './gearCatalog';
 
@@ -27,6 +32,7 @@ export interface PlayerGearRow {
   bHasEquipped: boolean; // EquippedGear 속성이 있었나 (조건식용)
   SkillLevels: Record<string, number>;
   bHasSkillLevels: boolean;
+  SkillLoadout: Record<string, string[]>; // 캐릭터 → 장착한 공격 스킬 (저장된 것만 — 없으면 DEFAULT_SKILLS)
   Rev: number | undefined; // GearRev — 장착 · 스킬 레벨을 바꿀 때마다 +1 (조건식으로 겹친 쓰기를 막는다)
 }
 
@@ -35,7 +41,7 @@ export async function readPlayerGear(playerId: string): Promise<PlayerGearRow> {
     new GetItemCommand({
       TableName: PLAYER_TABLE,
       Key: marshall({ PlayerID: playerId }),
-      ProjectionExpression: 'PlayerID, #items, Credits, EquippedGear, SkillLevels, GearRev',
+      ProjectionExpression: 'PlayerID, #items, Credits, EquippedGear, SkillLevels, SkillLoadout, GearRev',
       ExpressionAttributeNames: { '#items': 'Items' }, // Items 는 DynamoDB 예약어
       ConsistentRead: true,
     })
@@ -47,6 +53,10 @@ export async function readPlayerGear(playerId: string): Promise<PlayerGearRow> {
   for (const [k, v] of Object.entries((p.EquippedGear as Record<string, unknown>) ?? {})) if (typeof v === 'string' && v) equipped[k] = v;
   const levels: Record<string, number> = {};
   for (const [k, v] of Object.entries((p.SkillLevels as Record<string, unknown>) ?? {})) levels[k] = Math.max(1, Math.min(MAX_SKILL_LEVEL, Number(v) || 1));
+  const loadout: Record<string, string[]> = {};
+  for (const [k, v] of Object.entries((p.SkillLoadout as Record<string, unknown>) ?? {})) {
+    if (Array.isArray(v)) loadout[k] = [...new Set(v.map((x) => String(x)).filter(isSkillId))].slice(0, MAX_SKILLS);
+  }
   return {
     Exists: !!r.Item,
     Items: items,
@@ -55,6 +65,7 @@ export async function readPlayerGear(playerId: string): Promise<PlayerGearRow> {
     bHasEquipped: p.EquippedGear !== undefined,
     SkillLevels: levels,
     bHasSkillLevels: p.SkillLevels !== undefined,
+    SkillLoadout: loadout,
     Rev: p.GearRev === undefined ? undefined : Number(p.GearRev) || 0,
   };
 }
@@ -85,6 +96,8 @@ export function toClientGear(row: PlayerGearRow) {
   }
   const levels: Record<string, number> = {};
   for (const c of CHARACTERS) levels[c] = row.SkillLevels[c] ?? 1;
+  const loadout: Record<string, string[]> = {};
+  for (const c of CHARACTERS) loadout[c] = row.SkillLoadout[c] ?? DEFAULT_SKILLS[c] ?? [];
   return {
     Gear: GEAR.map((g) => ({
       ItemId: g.ItemId,
@@ -105,6 +118,9 @@ export function toClientGear(row: PlayerGearRow) {
     BooksToLevel: BOOKS_TO_LEVEL,
     MaxSkillLevel: MAX_SKILL_LEVEL,
     MaxGearCount: MAX_GEAR_COUNT,
+    SkillLoadout: loadout,
+    MaxSkills: MAX_SKILLS,
+    SkillIds: SKILL_IDS,
     Credits: row.Credits,
   };
 }

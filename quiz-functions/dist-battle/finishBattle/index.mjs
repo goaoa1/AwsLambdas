@@ -173,10 +173,10 @@ var GEAR = [
   { ItemId: "Gear_C_Pendant", Slot: "Accessory", Rarity: "Epic", Name: "\uACF5\uBA85 \uBAA9\uAC78\uC774", Desc: "\uACF5\uBA85\uC774 30% \uBE68\uB9AC \uCC2C\uB2E4", Stats: { Resonance: 0.3 }, Price: 0, Level: 0 }
 ];
 var REWARD_BY_DIFFICULTY = {
-  easy: { BookChance: 0.4, ExtraBookChance: 0, GearChance: 0.08 },
-  normal: { BookChance: 0.7, ExtraBookChance: 0, GearChance: 0.15 },
-  hard: { BookChance: 1, ExtraBookChance: 0, GearChance: 0.25 },
-  veryhard: { BookChance: 1, ExtraBookChance: 0.5, GearChance: 0.4 }
+  easy: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.08 },
+  normal: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.15 },
+  hard: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.25 },
+  veryhard: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.4 }
 };
 var BOSS_GEAR_BONUS = 0.1;
 function rarityWeights(volume) {

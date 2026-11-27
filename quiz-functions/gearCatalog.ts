@@ -42,6 +42,19 @@ export const MAX_SKILL_LEVEL = 5;
 // [레벨] = 그 레벨로 올리는 데 드는 스킬 책 (Lv2 1 · Lv3 2 · Lv4 3 · Lv5 4, 모두 10권)
 export const BOOKS_TO_LEVEL = [0, 0, 1, 2, 3, 4];
 
+// 공격 스킬 셋 (2026-11-27 — 게임 저장소 Docs/퀴즈맵_전투_개편_계획.md §88, 사용자: "모으기 기능을 없애고 스킬 버튼을 만들자 … 스킬은 최대 3개까지 장착할 수 있다"
+//   · 고른 것: 새 공격 스킬 여섯 · 서버에 저장 · 레벨은 지금 없앰). 스킬의 숫자(마력 · 세기)는 게임 waves.json skills — 서버는 아이디와 장착 수만 본다.
+//   보관: PlayerResources.SkillLoadout { Char_001: ["barrage", "lance", "chain"] } (차례 = 전투 단추 차례). 없는 캐릭터는 DEFAULT_SKILLS
+export const SKILL_IDS = ['blast', 'chain', 'lance', 'barrage', 'meteor', 'frost'];
+export const MAX_SKILLS = 3;
+// 고른 적이 없을 때 (게임 waves.json skill_loadout.default 와 같게)
+export const DEFAULT_SKILLS: Record<string, string[]> = {
+  Char_001: ['barrage', 'lance', 'chain'],
+  Char_002: ['meteor', 'blast', 'frost'],
+  Char_003: ['blast', 'lance', 'barrage'],
+  Char_004: ['chain', 'frost', 'lance'],
+};
+
 export const GEAR: GearDef[] = [
   { ItemId: 'Gear_W_Branch', Slot: 'Weapon', Rarity: 'Common', Name: '나뭇가지 지팡이', Desc: '주문 위력 +10%', Stats: { Power: 0.1 }, Price: 120, Level: 0 },
   { ItemId: 'Gear_W_Oak', Slot: 'Weapon', Rarity: 'Rare', Name: '참나무 지팡이', Desc: '주문 위력 +20%', Stats: { Power: 0.2 }, Price: 300, Level: 0 },
@@ -55,11 +68,12 @@ export const GEAR: GearDef[] = [
 ];
 
 // 전투 보상 (finish-battle — 의뢰 완료 · 믿을 수 있는 판만). 난이도 → 스킬 책 · 장비 확률
+//   2026-11-27 (Docs §88 — 스킬 레벨을 없앰): 스킬 책은 나오지 않는다. 되살리면 BookChance 0.4 · 0.7 · 1 · 1, veryhard ExtraBookChance 0.5
 export const REWARD_BY_DIFFICULTY: Record<string, { BookChance: number; ExtraBookChance: number; GearChance: number }> = {
-  easy: { BookChance: 0.4, ExtraBookChance: 0, GearChance: 0.08 },
-  normal: { BookChance: 0.7, ExtraBookChance: 0, GearChance: 0.15 },
-  hard: { BookChance: 1, ExtraBookChance: 0, GearChance: 0.25 },
-  veryhard: { BookChance: 1, ExtraBookChance: 0.5, GearChance: 0.4 },
+  easy: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.08 },
+  normal: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.15 },
+  hard: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.25 },
+  veryhard: { BookChance: 0, ExtraBookChance: 0, GearChance: 0.4 },
 };
 export const BOSS_GEAR_BONUS = 0.1; // 보스를 쓰러뜨렸으면 장비 확률 +10%p
 // 권(단)에 따라 나오는 등급의 비율 — 단 = 10 + QuizID
@@ -74,6 +88,9 @@ export function findGear(id: string | undefined): GearDef | undefined {
 }
 export function isCharacter(id: unknown): id is string {
   return typeof id === 'string' && CHARACTERS.includes(id);
+}
+export function isSkillId(id: unknown): id is string {
+  return typeof id === 'string' && SKILL_IDS.includes(id);
 }
 export function isSlot(s: unknown): s is GearSlot {
   return typeof s === 'string' && (SLOTS as string[]).includes(s);
